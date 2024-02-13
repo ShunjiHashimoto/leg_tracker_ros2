@@ -23,9 +23,10 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # Include our own headers
-include_directories(include)
+include_directories(include ${OpenCV_INCLUDE_DIR})
 
 # Generate msg
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -49,6 +50,28 @@ ament_target_dependencies(occupancy_grid_mapping
   std_msgs
   )
 
+add_executable(detect_leg_clusters src/detect_leg_clusters.cpp)
+rosidl_target_interfaces(detect_leg_clusters ${PROJECT_NAME} "rosidl_typesupport_cpp")
+ament_target_dependencies(detect_leg_clusters 
+  rclcpp 
+  sensor_msgs 
+  std_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  )
+target_link_libraries(detect_leg_clusters laser_processor)
+target_link_libraries(detect_leg_clusters ${OpenCV_LIBRARIES})
+
+add_library(laser_processor SHARED src/laser_processor.cpp)
+ament_target_dependencies(laser_processor 
+  rclcpp
+  sensor_msgs 
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  )
+
 # Install our headers
 install(
   DIRECTORY include/
@@ -59,6 +82,18 @@ install(
   TARGETS occupancy_grid_mapping 
   DESTINATION lib/${PROJECT_NAME}
 )
+
+install(
+  TARGETS detect_leg_clusters 
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(TARGETS laser_processor
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 install(
   DIRECTORY launch 
   DESTINATION share/${PROJECT_NAME}
