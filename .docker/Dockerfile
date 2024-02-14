@@ -16,8 +16,6 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y \
   ros-humble-urg-node \
   ros-humble-sensor-msgs && \
-  ros-humble-nav-msgs && \
-  ros-humble-tf2-ros && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # entrypoint.sh スクリプトをコンテナにコピー
@@ -34,3 +32,6 @@ CMD ["bash"]
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 RUN mkdir -p /root/ros2_ws/src
 WORKDIR /root/ros2_ws/src
+
+RUN echo 'source ~/ros2_ws/before_bringup.sh' >> ~/.bashrc
+RUN echo 'alias cm="cd ~/ros2_ws && colcon build --symlink-install --packages-select leg_tracker_ros2"' >> ~/.bashrc

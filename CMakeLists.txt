@@ -61,6 +61,7 @@ ament_target_dependencies(detect_leg_clusters
   tf2_geometry_msgs
   )
 target_link_libraries(detect_leg_clusters laser_processor)
+target_link_libraries(detect_leg_clusters cluster_features)
 target_link_libraries(detect_leg_clusters ${OpenCV_LIBRARIES})
 
 add_library(laser_processor SHARED src/laser_processor.cpp)
@@ -71,6 +72,17 @@ ament_target_dependencies(laser_processor
   tf2_ros
   tf2_geometry_msgs
   )
+
+add_library(cluster_features SHARED src/cluster_features.cpp)
+ament_target_dependencies(cluster_features 
+  rclcpp
+  sensor_msgs 
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  )
+target_link_libraries(cluster_features laser_processor)
+target_link_libraries(cluster_features ${OpenCV_LIBRARIES})
 
 # Install our headers
 install(
@@ -89,6 +101,12 @@ install(
 )
 
 install(TARGETS laser_processor
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+install(TARGETS cluster_features 
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
