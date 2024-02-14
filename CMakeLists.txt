@@ -59,6 +59,7 @@ ament_target_dependencies(detect_leg_clusters
   tf2
   tf2_ros
   tf2_geometry_msgs
+  visualization_msgs 
   )
 target_link_libraries(detect_leg_clusters laser_processor)
 target_link_libraries(detect_leg_clusters cluster_features)
