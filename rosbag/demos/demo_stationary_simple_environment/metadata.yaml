@@ -1,0 +1,29 @@
+rosbag2_bagfile_information:
+  compression_format: ''
+  compression_mode: ''
+  custom_data: {}
+  duration:
+    nanoseconds: 125989004529
+  files:
+  - duration:
+      nanoseconds: 125989004529
+    message_count: 1265
+    path: demo_stationary_simple_environment.db3
+    starting_time:
+      nanoseconds_since_epoch: 1403201183687882605
+  message_count: 1265
+  relative_file_paths:
+  - demo_stationary_simple_environment.db3
+  ros_distro: rosbags
+  starting_time:
+    nanoseconds_since_epoch: 1403201183687882605
+  storage_identifier: sqlite3
+  topics_with_message_count:
+  - message_count: 1265
+    topic_metadata:
+      name: /scan
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/LaserScan
+      type_description_hash: RIHS01_64c191398013af96509d518dac71d5164f9382553fce5c1f8cca5be7924bd828
+  version: 8

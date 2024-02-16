@@ -1,7 +1,7 @@
 #!/bin/bash
 
-DOCKER_IMAGE="tang_lidar:latest"
-CONTAINER_NAME="tang_lidar"
+DOCKER_IMAGE="leg_tracker_ros2:latest"
+CONTAINER_NAME="leg_tracker_ros2"
 
 docker run --rm -it \
     --env="DISPLAY=$DISPLAY" \

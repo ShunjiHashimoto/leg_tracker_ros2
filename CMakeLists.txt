@@ -90,7 +90,7 @@ install(
   DIRECTORY include/
   DESTINATION include
 )
- 
+
 install(
   TARGETS occupancy_grid_mapping 
   DESTINATION lib/${PROJECT_NAME}
@@ -113,8 +113,11 @@ install(TARGETS cluster_features
   RUNTIME DESTINATION bin
 )
 
-install(
-  DIRECTORY launch 
+install(DIRECTORY launch 
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY rosbag 
   DESTINATION share/${PROJECT_NAME}
 )
 
