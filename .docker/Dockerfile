@@ -5,18 +5,25 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Install apt packages
 RUN apt-get update && apt-get install -y \
-git \
-vim \
-wget \
-tmux \
-terminator && \
-apt-get clean && rm -rf /var/lib/apt/lists/*
+  git \
+  vim \
+  wget \
+  tmux \
+  terminator 
+
+# Install python packages
+RUN apt-get install -y \
+  python3-pykdl \
+  python3-pip 
 
 # Install ROS packages
 RUN apt-get update && apt-get install -y \
   ros-humble-urg-node \
   ros-humble-sensor-msgs && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install pip packages
+RUN pip install pykalman
 
 # entrypoint.sh スクリプトをコンテナにコピー
 COPY entrypoint.sh /entrypoint.sh
