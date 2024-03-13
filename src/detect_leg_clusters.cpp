@@ -177,7 +177,7 @@ private:
    // Publish detected legs to /detected_leg_clusters and to rviz
    // They are ordered from closest to the laser scanner to furthest  
    int clusters_published_counter = 0;
-   int id_num = 1;      
+   int id_num = 1;     
    for (std::set<leg_tracker_ros2::msg::Leg>::iterator it = leg_set.begin(); it != leg_set.end(); ++it) {
       // Publish to /detected_leg_clusters topic
       leg_tracker_ros2::msg::Leg leg = *it;
@@ -190,7 +190,8 @@ private:
       m.header.frame_id = fixed_frame_;
       m.ns = "LEGS";
       m.id = id_num++;
-      m.type = m.SPHERE;
+      m.type = visualization_msgs::msg::Marker::SPHERE;
+      m.action = visualization_msgs::msg::Marker::ADD;
       m.pose.position.x = leg.position.x ;
       m.pose.position.y = leg.position.y;
       m.pose.position.z = 0.2;
@@ -202,7 +203,7 @@ private:
       m.color.g = leg.confidence;
       m.color.b = leg.confidence;
       markers_pub_->publish(m);
-
+   
       // Comparison using '==' and not '>=' is important, as it allows <max_detected_clusters_>=-1 
       // to publish infinite markers
       if (clusters_published_counter == max_detected_clusters_) 
