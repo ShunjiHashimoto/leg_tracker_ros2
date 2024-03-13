@@ -6,6 +6,13 @@
 #include <tf2/utils.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+
+// Custom messages
+#include "leg_tracker_ros2/msg/leg.hpp"
+#include "leg_tracker_ros2/msg/leg_array.hpp"
 
 #define ALPHA 0.2
 #define BETA 0.1
@@ -45,7 +52,13 @@ public:
             }
         }
     }
-    scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/scan", 10, std::bind(&OccupancyGridMapping::laserAndLegCallback, this, std::placeholders::_1));
+    
+    // 2つのトピックを同期してSubする
+    auto scan_sub = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>(this, "/scan");
+    auto legs_sub = std::make_shared<message_filters::Subscriber<leg_tracker_ros2::msg::LegArray>>(this, "/non_leg_clusters");
+    auto sync = std::make_shared<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::LaserScan, leg_tracker_ros2::msg::LegArray>>>(message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::LaserScan, leg_tracker_ros2::msg::LegArray>(10), *scan_sub, *legs_sub);
+    sync->registerCallback(std::bind(&OccupancyGridMapping::laserAndLegCallback, this, std::placeholders::_1, std::placeholders::_2));
+
     map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(local_map_topic, 10);
     // markers_pub_ = this->create_publisher<visualization_msgs::Marker>("visualization_marker", 20);
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -56,7 +69,6 @@ private:
  std::string scan_topic_;
  std::string fixed_frame_;
  std::string base_frame_;
- rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_pub_;
 
  double l0_;
@@ -79,7 +91,7 @@ private:
  bool invalid_measurements_are_free_space_;
  double reliable_inf_range_;
  
- void laserAndLegCallback(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg) {
+ void laserAndLegCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg, const leg_tracker_ros2::msg::LegArray::ConstSharedPtr& non_leg_clusters) {
     bool transform_available;
     rclcpp::Time tf_time;
     if (use_scan_header_stamp_for_tfs_) {
@@ -251,14 +263,14 @@ private:
             }
 
             // OccupancyGrid msgを作成
-            nav_msgs::msgs::OccupancyGrid m_msg;
+            nav_msgs::msg::OccupancyGrid m_msg;
             m_msg.header.stamp = scan_msg->header.stamp; //ros::Time::now();
             m_msg.header.frame_id = fixed_frame_;
             m_msg.info.resolution = resolution_;
             m_msg.info.width = width_;
             m_msg.info.height = width_;
-            m_msg.info.origin.position.x = grid_centre_pos_x_ - (width_/2.0)*resolution_;
-            m_msg.info.origin.position.y = grid_centre_pos_y_ - (width_/2.0)*resolution_;
+            m_msg.info.origin.position.x = grid_center_pos_x_ - (width_/2.0)*resolution_;
+            m_msg.info.origin.position.y = grid_center_pos_y_ - (width_/2.0)*resolution_;
             for (int i = 0; i < width_; i++) {        
                 for (int j = 0; j < width_; j++) {
                     m_msg.data.push_back((int)(inverseLogit(l_[width_*i + j])*100));
@@ -266,7 +278,7 @@ private:
             }
 
             // Publish!
-            map_pub_.publish(m_msg);
+            map_pub_->publish(m_msg);
         }
     }
  }
@@ -289,7 +301,7 @@ private:
     }
  }
  
- auto createQuaternionMsgFromYaw(double yaw) {
+ geometry_msgs::msg::Quaternion createQuaternionMsgFromYaw(double yaw) {
     tf2::Quaternion q;
     q.setRPY(0, 0, yaw);
     return tf2::toMsg(q); // tf2 msgをgeometry_msgs型に変換

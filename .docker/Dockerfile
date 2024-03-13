@@ -5,20 +5,28 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Install apt packages
 RUN apt-get update && apt-get install -y \
-git \
-vim \
-wget \
-tmux \
-terminator && \
-apt-get clean && rm -rf /var/lib/apt/lists/*
+  build-essential \
+  gdb \
+  cmake \
+  git \
+  vim \
+  wget \
+  tmux \
+  terminator 
+
+# Install python packages
+RUN apt-get install -y \
+  python3-pykdl \
+  python3-pip 
 
 # Install ROS packages
 RUN apt-get update && apt-get install -y \
   ros-humble-urg-node \
   ros-humble-sensor-msgs && \
-  ros-humble-nav-msgs && \
-  ros-humble-tf2-ros && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install pip packages
+RUN pip install pykalman
 
 # entrypoint.sh スクリプトをコンテナにコピー
 COPY entrypoint.sh /entrypoint.sh
@@ -34,3 +42,6 @@ CMD ["bash"]
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 RUN mkdir -p /root/ros2_ws/src
 WORKDIR /root/ros2_ws/src
+
+RUN echo 'source ~/ros2_ws/before_bringup.sh' >> ~/.bashrc
+RUN echo 'alias cm="cd ~/ros2_ws && colcon build --symlink-install --packages-select leg_tracker_ros2"' >> ~/.bashrc
