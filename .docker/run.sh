@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DOCKER_IMAGE="leg_tracker_ros2:latest"
+DOCKER_IMAGE="leg_tracker:latest"
 CONTAINER_NAME="leg_tracker_ros2"
 
 docker run --rm -it \
