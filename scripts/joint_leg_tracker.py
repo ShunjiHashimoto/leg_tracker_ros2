@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -433,6 +435,105 @@ class KalmanMultiTrackerNode(Node):
 
         self.publish_tracked_objects(now)
         self.publish_tracked_people(now)
+
+    def publish_tracked_objects(self, now):
+        if self.use_scan_header_stamp_for_tfs:
+            tf_time = now
+            try:
+                transform1 = self.buffer.lookup_transform(self.publish_people_frame, self.fixed_frame, tf_time, rclpy.duration(1.0))
+                transform_available = True
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                transform_available = False
+        else :
+            tf_time = self.get_clock().now().to_msg()
+            transform_available = self.buffer.can_transform(self.publish_people_frame, self.fixed_frame, tf_time)
+
+        marker_id = 0
+        if not transform_available:
+            self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
+        else:
+            for track in self.objects_tracked:
+                if track.is_person:
+                    continue
+
+                if self.publish_occluded or track.seen_in_current_scan:  
+                    ps = PointStamped()
+                    ps.header.frame_id = self.fixed_frame
+                    ps.header.stamp = tf_time
+                    ps.point.x = track.pos_x
+                    ps.point.y = track.pos_y
+                    try:
+                        ps = self.buffer.transform(ps, self.publish_people_frame)
+                    except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                        continue
+
+                    # Publish Rviz Marker
+                    marker = Marker()
+                    marker.header.frame_id =  self.publish_people_frame
+                    marker.header.stamp = now
+                    marker.ns = "objects_tracked"
+                    if track.in_free_space < self.in_free_space_threshold:
+                        marker.color.r = track.colour[0]
+                        marker.color.g = track.colour[1]
+                        marker.color.b = track.colour[2]
+                    else:
+                        marker.color.r = 0.0
+                        marker.color.g = 0.0
+                        marker.color.b = 0.0
+                    marker.color.a = 1.0
+                    marker.pose.position.x = ps.point.x
+                    marker.pose.position.y = ps.point.y
+                    marker.id = marker_id
+                    marker_id += 1
+                    marker.type = marker.CYLINDER
+                    marker.scale.x = 0.05
+                    marker.scale.y = 0.05
+                    marker.scale.z = 0.20
+                    marker.pose.position.z = 0.15
+
+                    self.marker_pub.publish(marker)
+
+                    # Publish a marker showing distance travelled:
+                    if track.dist_travelled > 1:
+                        marker.color.r = 1.0
+                        marker.color.g = 1.0
+                        marker.color.b = 1.0
+                        marker.color.a = 1.0
+                        marker.id = marker_id
+                        marker_id += 1
+                        marker.type = Marker.TEXT_VIEW_FACING
+                        marker.text = str(round(track.dist_travelled,1))
+                        marker.scale.z = 0.1            
+                        marker.pose.position.z = 0.6
+                        self.marker_pub.publish(marker)      
+
+                    # Publish <self.confidence_percentile>% confidence bounds of track as an ellipse:
+                    cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
+                    std = cov**(1./2.)
+                    gate_dist_euclid = scipy.stats.norm.ppf(1.0 - (1.0-self.confidence_percentile)/2., 0, std)                    
+                    marker.type = Marker.SPHERE
+                    marker.scale.x = 2*gate_dist_euclid
+                    marker.scale.y = 2*gate_dist_euclid
+                    marker.scale.z = 0.01   
+                    marker.color.r = 1.0
+                    marker.color.g = 1.0
+                    marker.color.b = 1.0                
+                    marker.color.a = 0.1
+                    marker.pose.position.z = 0.0
+                    marker.id = marker_id 
+                    marker_id += 1                    
+                    self.marker_pub.publish(marker)
+
+            # Clear previously published track markers
+            for m_id in range(marker_id, self.prev_track_marker_id):
+                marker = Marker()
+                marker.header.stamp = now
+                marker.header.frame_id = self.publish_people_frame
+                marker.ns = "oject_tracked"
+                marker.id = m_id
+                marker.action = marker.DELETE
+                self.marker_pub.publish(marker)
+            self.prev_track_marker_id = marker_id
 
 
 def main(args=None):

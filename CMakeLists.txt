@@ -121,4 +121,10 @@ install(DIRECTORY rosbag
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Install Python executables
+install(PROGRAMS
+  scripts/joint_leg_tracker.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
