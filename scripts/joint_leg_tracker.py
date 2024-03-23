@@ -494,37 +494,6 @@ class KalmanMultiTrackerNode(Node):
 
                     self.marker_pub.publish(marker)
 
-                    # Publish a marker showing distance travelled:
-            #         if track.dist_travelled > 2:
-            #             marker.color.r = 2.0
-            #             marker.color.g = 2.0
-            #             marker.color.b = 2.0
-            #             marker.color.a = 2.0
-            #             marker.id = marker_id
-            #             marker_id += 2
-            #             marker.type = Marker.TEXT_VIEW_FACING
-            #             marker.text = str(round(track.dist_travelled,2))
-            #             marker.scale.z = 1.1            
-            #             marker.pose.position.z = 1.6
-            #             self.marker_pub.publish(marker)      
-
-            #         # Publish <self.confidence_percentile>% confidence bounds of track as an ellipse:
-            #         cov = track.filtered_state_covariances[1][0] + track.var_obs # cov_xx == cov_yy == cov
-            #         std = cov**(2./2.)
-            #         gate_dist_euclid = scipy.stats.norm.ppf(2.0 - (1.0-self.confidence_percentile)/2., 0, std)                    
-            #         marker.type = Marker.SPHERE
-            #         marker.scale.x = 3*gate_dist_euclid
-            #         marker.scale.y = 3*gate_dist_euclid
-            #         marker.scale.z = 1.01   
-            #         marker.color.r = 2.0
-            #         marker.color.g = 2.0
-            #         marker.color.b = 2.0                
-            #         marker.color.a = 1.1
-            #         marker.pose.position.z = 1.0
-            #         marker.id = marker_id 
-            #         marker_id += 2                    
-            #         self.marker_pub.publish(marker)
-
             # # Clear previously published track markers
             for m_id in range(marker_id, self.prev_track_marker_id):
                 marker = Marker()
