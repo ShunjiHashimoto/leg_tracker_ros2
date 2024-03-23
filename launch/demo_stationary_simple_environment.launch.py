@@ -15,17 +15,17 @@ def generate_launch_description():
 
     ld = LaunchDescription([
 
-        # Launching Rosbag node
-        launch.actions.ExecuteProcess(
-            cmd=['ros2', 'bag', 'play', '-s', 'sqlite3', rosbag_path],
-            output='screen'
-        ),
+        # # Launching Rosbag node
+        # launch.actions.ExecuteProcess(
+        #     cmd=['ros2', 'bag', 'play', '-s', 'sqlite3', rosbag_path],
+        #     output='screen'
+        # ),
 
-        # Launching RVIZ2
-        launch.actions.ExecuteProcess(
-            cmd=['ros2', 'run', 'rviz2', 'rviz2', '-d', rviz2_config_path],
-            output='screen'
-        )
+        # # Launching RVIZ2
+        # launch.actions.ExecuteProcess(
+        #     cmd=['ros2', 'run', 'rviz2', 'rviz2', '-d', rviz2_config_path],
+        #     output='screen'
+        # )
     ])
 
     # Launching detect_leg_clusters node
@@ -41,16 +41,16 @@ def generate_launch_description():
     )
 
     # Launching joint_leg_tracker node
-    # joint_leg_tracker_node = Node(
-    #     package="leg_detector",
-    #     executable="joint_leg_tracker.py",
-    #     name="joint_leg_tracker",
-    #     parameters=[
-    #         {"scan_topic" : "/scan"},
-    #         {"fixed_frame" : "laser"},
-    #         {"scan_frequency" : 10}
-    #     ]    
-    # )
+    joint_leg_tracker_node = Node(
+        package="leg_tracker_ros2",
+        executable="joint_leg_tracker.py",
+        name="joint_leg_tracker",
+        parameters=[
+            {"scan_topic" : "/scan"},
+            {"fixed_frame" : "laser"},
+            {"scan_frequency" : 10}
+        ]    
+    )
 
     # Launching inflated_human_scan node
     # inflated_human_scan_node = Node(
@@ -63,20 +63,20 @@ def generate_launch_description():
     # )
         
     # Launching local_occupancy_grid_mapping node
-    # local_occupancy_grid_mapping_node = Node(
-    #     package="leg_detector",
-    #     executable="local_occupancy_grid_mapping",
-    #     name="local_occupancy_grid_mapping",
-    #     parameters=[
-    #         {"scan_topic" : "/scan"},
-    #         {"fixed_frame" : "laser"},
-    #     ]    
-    # )
+    local_occupancy_grid_mapping_node = Node(
+        package="leg_tracker_ros2",
+        executable="occupancy_grid_mapping",
+        name="occupancy_grid_mapping",
+        parameters=[
+            {"scan_topic" : "/scan"},
+            {"fixed_frame" : "laser"},
+        ]    
+    )
 
     ld.add_action(detect_leg_clusters_node)
-    # ld.add_action(joint_leg_tracker_node)
+    ld.add_action(joint_leg_tracker_node)
     # ld.add_action(inflated_human_scan_node)
-    # ld.add_action(local_occupancy_grid_mapping_node)
+    ld.add_action(local_occupancy_grid_mapping_node)
 
     return ld 
  
