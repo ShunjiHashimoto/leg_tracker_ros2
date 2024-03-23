@@ -32,6 +32,8 @@ include_directories(include ${OpenCV_INCLUDE_DIR})
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/LegArray.msg"
   "msg/Leg.msg"
+  "msg/PersonArray.msg"
+  "msg/Person.msg"
   DEPENDENCIES std_msgs geometry_msgs
 )
 
@@ -49,6 +51,7 @@ ament_target_dependencies(occupancy_grid_mapping
   tf2
   std_msgs
   )
+target_link_libraries(occupancy_grid_mapping laser_processor)
 
 add_executable(detect_leg_clusters src/detect_leg_clusters.cpp)
 rosidl_target_interfaces(detect_leg_clusters ${PROJECT_NAME} "rosidl_typesupport_cpp")
