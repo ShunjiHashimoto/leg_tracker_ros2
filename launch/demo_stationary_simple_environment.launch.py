@@ -15,17 +15,17 @@ def generate_launch_description():
 
     ld = LaunchDescription([
 
-        # # Launching Rosbag node
-        # launch.actions.ExecuteProcess(
-        #     cmd=['ros2', 'bag', 'play', '-s', 'sqlite3', rosbag_path],
-        #     output='screen'
-        # ),
+        # Launching Rosbag node
+        launch.actions.ExecuteProcess(
+            cmd=['ros2', 'bag', 'play', '-s', 'sqlite3', rosbag_path],
+            output='screen'
+        ),
 
-        # # Launching RVIZ2
-        # launch.actions.ExecuteProcess(
-        #     cmd=['ros2', 'run', 'rviz2', 'rviz2', '-d', rviz2_config_path],
-        #     output='screen'
-        # )
+        # Launching RVIZ2
+        launch.actions.ExecuteProcess(
+            cmd=['ros2', 'run', 'rviz2', 'rviz2', '-d', rviz2_config_path],
+            output='screen'
+        )
     ])
 
     # Launching detect_leg_clusters node
