@@ -1,10 +1,13 @@
 #!/usr/bin/python3
 
+import os
+from os.path import join
 from ament_index_python.packages import get_package_share_directory
+import launch
 from launch import LaunchDescription
 from launch_ros.actions import Node
-import launch
-import os
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 leg_detector_path = get_package_share_directory('leg_tracker_ros2')
 rosbag_path = leg_detector_path + "/rosbag/demos/demo_stationary_simple_environment"
@@ -73,10 +76,16 @@ def generate_launch_description():
         ]    
     )
 
+    # Include URG Node2 Launch File
+    pkg_prefix = get_package_share_directory('urg_node2')
+    launch_path = join(pkg_prefix, 'launch/urg_node2.launch.py')
+    urg_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
+
     ld.add_action(detect_leg_clusters_node)
     ld.add_action(joint_leg_tracker_node)
     # ld.add_action(inflated_human_scan_node)
     ld.add_action(local_occupancy_grid_mapping_node)
+    ld.add_action(urg_node)
 
     return ld 
  
