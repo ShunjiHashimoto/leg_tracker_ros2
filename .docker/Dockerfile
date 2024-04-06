@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
   vim \
   wget \
   tmux \
+  x11-apps \
   terminator 
 
 # Install python packages
@@ -23,7 +24,8 @@ RUN apt-get install -y \
 # Install ROS packages
 RUN apt-get update && apt-get install -y \
   ros-humble-urg-node \
-  ros-humble-sensor-msgs && \
+  ros-humble-sensor-msgs \
+  ros-humble-rviz2 && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install pip packages
