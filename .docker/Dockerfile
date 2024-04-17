@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get install -y \
   python3-pykdl \
   python3-pip \
-  python3-libgpiod
+  python3-gpiozero
 
 # Install ROS packages
 RUN apt-get update && apt-get install -y \
