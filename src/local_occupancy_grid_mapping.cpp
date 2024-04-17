@@ -133,7 +133,7 @@ private:
         }
 
         if (transform_available) {
-            RCLCPP_INFO(this->get_logger(), "Transform Available");
+            // RCLCPP_INFO(this->get_logger(), "Transform Available");
             std::vector<geometry_msgs::msg::Point> non_legs;
             for(long unsigned int i = 0; i < non_leg_clusters->legs.size(); i++){
                 leg_tracker_ros2::msg::Leg leg = non_leg_clusters->legs[i];
