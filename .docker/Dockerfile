@@ -31,10 +31,12 @@ RUN apt-get update && apt-get install -y \
 
 # Install pip packages
 RUN pip install \
+  pyserial \
   pykalman \
   spidev \
   rpi-lgpio \
-  gpiozero
+  gpiozero \
+  transforms3d
 
 # entrypoint.sh スクリプトをコンテナにコピー
 COPY entrypoint.sh /entrypoint.sh
