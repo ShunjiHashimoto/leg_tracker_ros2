@@ -81,6 +81,11 @@ def generate_launch_description():
     launch_path = join(pkg_prefix, 'launch/urg_node2.launch.py')
     urg_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
 
+    # Include URG Node2 Launch File
+    pkg_prefix = get_package_share_directory('ros2_razor_imu')
+    launch_path = join(pkg_prefix, 'launch/razor_pub.launch.py')
+    urg_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
+
     ld.add_action(detect_leg_clusters_node)
     ld.add_action(joint_leg_tracker_node)
     # ld.add_action(inflated_human_scan_node)
