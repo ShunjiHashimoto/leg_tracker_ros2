@@ -5,6 +5,7 @@ from os.path import join
 from ament_index_python.packages import get_package_share_directory
 import launch
 from launch import LaunchDescription
+from launch.actions import TimerAction, GroupAction
 from launch_ros.actions import Node
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -16,7 +17,7 @@ forest_file_path = leg_detector_path + "/config/trained_leg_detector_res=0.33.ya
 
 def generate_launch_description():
 
-    ld = LaunchDescription([
+    main_nodes = LaunchDescription([
 
         # Launching Rosbag node
         #launch.actions.ExecuteProcess(
@@ -51,7 +52,7 @@ def generate_launch_description():
         parameters=[
             {"scan_topic" : "/scan"},
             {"fixed_frame" : "laser"},
-            {"scan_frequency" : 10}
+            {"scan_frequency" : 40}
         ]    
     )
 
@@ -72,7 +73,9 @@ def generate_launch_description():
         name="occupancy_grid_mapping",
         parameters=[
             {"scan_topic" : "/scan"},
-            {"fixed_frame" : "laser"},
+            {"fixed_frame" : "imu_link"},
+            {"base_frame": "imu_link"},
+            {'local_map_resolution':0.01},
         ]    
     )
 
@@ -85,13 +88,25 @@ def generate_launch_description():
     pkg_prefix = get_package_share_directory('ros2_razor_imu')
     launch_path = join(pkg_prefix, 'launch/razor_pub.launch.py')
     imu_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
+    
+    
+    main_nodes.add_action(detect_leg_clusters_node)
+    main_nodes.add_action(joint_leg_tracker_node)
+    main_nodes.add_action(local_occupancy_grid_mapping_node)
+    
+    delayed_nodes = TimerAction(
+        period=10.0,
+        actions=[main_nodes]
+    )
 
-    ld.add_action(detect_leg_clusters_node)
-    ld.add_action(joint_leg_tracker_node)
+    # ld.add_action(detect_leg_clusters_node)
+    # ld.add_action(joint_leg_tracker_node)
     # ld.add_action(inflated_human_scan_node)
-    ld.add_action(local_occupancy_grid_mapping_node)
+    # ld.add_action(local_occupancy_grid_mapping_node)
+    ld = LaunchDescription()
     ld.add_action(urg_node)
     ld.add_action(imu_node)
+    ld.add_action(delayed_nodes)
 
     return ld 
  

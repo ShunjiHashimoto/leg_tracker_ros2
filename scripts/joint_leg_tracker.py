@@ -57,13 +57,15 @@ class ObjectTracked:
         # 定常速度モデルのカルマンフィルタを使って人を追跡する  
         # LiDARデータの値は正確であるため観測値をより信頼するように式を立てる  
         # TODO: 使用するLiDARによってパラメータ変更が必要
-        scan_frequency = 7.5 
+        scan_frequency = 40
+        # scan_frequency = 7.5 
         delta_t = 1./scan_frequency
         if scan_frequency > 7.49 and scan_frequency < 7.51:
             std_process_noise = 0.06666
         elif scan_frequency > 9.99 and scan_frequency < 10.01:
             std_process_noise = 0.05
-        elif scan_frequency > 14.99 and scan_frequency < 15.01:
+        # elif scan_frequency > 14.99 and scan_frequency < 15.01:
+        elif scan_frequency > 14.99:
             std_process_noise = 0.03333
         else:
             print ("Scan frequency needs to be either 7.5, 10 or 15 or the standard deviation of the process noise needs to be tuned to your scanner frequency")
@@ -163,14 +165,14 @@ class KalmanMultiTrackerNode(Node):
         self.latest_scan_header_stamp_with_tf_available = self.get_clock().now()
 
         # ROS publishers
-        self.people_tracked_pub = self.create_publisher(PersonArray, "people_tracked", 300)
-        self.people_detected_pub = self.create_publisher(PersonArray, "people_detected", 300)
-        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 300)
-        self.non_leg_clusters_pub = self.create_publisher(LegArray, "non_leg_clusters", 300)
+        self.people_tracked_pub = self.create_publisher(PersonArray, "people_tracked", 10)
+        self.people_detected_pub = self.create_publisher(PersonArray, "people_detected", 10)
+        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 10)
+        self.non_leg_clusters_pub = self.create_publisher(LegArray, "non_leg_clusters", 10)
 
         # ROS subscribers 
-        self.detected_clusters_sub = self.create_subscription(LegArray, "detected_leg_clusters", self.detected_clusters_callback, 300)
-        self.local_map_sub = self.create_subscription(OccupancyGrid, "local_map", self.local_map_callback, 300)
+        self.detected_clusters_sub = self.create_subscription(LegArray, "detected_leg_clusters", self.detected_clusters_callback, 10)
+        self.local_map_sub = self.create_subscription(OccupancyGrid, "local_map", self.local_map_callback, 10)
 
         rclpy.spin(self)
         
