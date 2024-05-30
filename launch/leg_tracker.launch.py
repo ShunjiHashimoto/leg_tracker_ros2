@@ -88,7 +88,6 @@ def generate_launch_description():
     launch_path = join(pkg_prefix, 'launch/razor_pub.launch.py')
     imu_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
     
-    
     main_nodes.add_action(detect_leg_clusters_node)
     main_nodes.add_action(joint_leg_tracker_node)
     main_nodes.add_action(local_occupancy_grid_mapping_node)
