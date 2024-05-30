@@ -18,7 +18,6 @@ forest_file_path = leg_detector_path + "/config/trained_leg_detector_res=0.33.ya
 def generate_launch_description():
 
     main_nodes = LaunchDescription([
-
         # Launching Rosbag node
         #launch.actions.ExecuteProcess(
         #    cmd=['ros2', 'bag', 'play', '-s', 'sqlite3', rosbag_path],
@@ -93,16 +92,13 @@ def generate_launch_description():
     main_nodes.add_action(detect_leg_clusters_node)
     main_nodes.add_action(joint_leg_tracker_node)
     main_nodes.add_action(local_occupancy_grid_mapping_node)
+    # main_nodes.add_action(inflated_human_scan_node)
     
     delayed_nodes = TimerAction(
         period=10.0,
         actions=[main_nodes]
     )
 
-    # ld.add_action(detect_leg_clusters_node)
-    # ld.add_action(joint_leg_tracker_node)
-    # ld.add_action(inflated_human_scan_node)
-    # ld.add_action(local_occupancy_grid_mapping_node)
     ld = LaunchDescription()
     ld.add_action(urg_node)
     ld.add_action(imu_node)
