@@ -48,6 +48,7 @@ def generate_launch_description():
         package="leg_tracker_ros2",
         executable="joint_leg_tracker.py",
         name="joint_leg_tracker",
+        output="screen", 
         parameters=[
             {"scan_topic" : "/scan"},
             {"fixed_frame" : "laser"},
