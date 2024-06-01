@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rcl_interfaces.msg import SetParametersResult
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker,  MarkerArray
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import PointStamped, Point, Quaternion
@@ -44,7 +44,7 @@ class ObjectTracked:
     def __init__(self, x, y, now, confidence, is_person, in_free_space):        
         self.id_num = ObjectTracked.new_leg_id_num
         ObjectTracked.new_leg_id_num += 1
-        self.colour = (random.random(), random.random(), random.random())
+        self.color = (random.random(), random.random(), random.random())
         self.last_seen = now # ROSのタイムスタンプ
         self.seen_in_current_scan = True
         self.times_seen = 1
@@ -126,7 +126,6 @@ class ObjectTracked:
         self.vel_x = self.filtered_state_means[2]
         self.vel_y = self.filtered_state_means[3]
 
-
 class KalmanMultiTrackerNode(Node):    
     max_cost = 9999999
 
@@ -168,7 +167,7 @@ class KalmanMultiTrackerNode(Node):
         # ROS publishers
         self.people_tracked_pub = self.create_publisher(PersonArray, "people_tracked", 10)
         self.follow_target_person_pub = self.create_publisher(Person, "follow_target_person", 10)
-        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 10)
+        self.marker_array_pub = self.create_publisher(MarkerArray, "visualization_marker_array", 10)
         self.non_leg_clusters_pub = self.create_publisher(LegArray, "non_leg_clusters", 10)
 
         # ROS subscribers 
@@ -453,6 +452,10 @@ class KalmanMultiTrackerNode(Node):
             transform_available = self.buffer.can_transform(self.publish_people_frame, self.fixed_frame, tf_time)
 
         marker_id = 0
+        markers = MarkerArray()
+        ns = "objects_tracked"
+        frame_id = self.publish_people_frame
+        
         if not transform_available:
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else:
@@ -472,41 +475,19 @@ class KalmanMultiTrackerNode(Node):
                         continue
 
                     # Publish Rviz Marker
-                    marker = Marker()
-                    marker.header.frame_id =  self.publish_people_frame
-                    marker.header.stamp = now
-                    marker.ns = "objects_tracked"
+                    color = [0.0, 0.0, 0.0, 1.0]
                     if track.in_free_space < self.in_free_space_threshold:
-                        marker.color.r = track.colour[0]
-                        marker.color.g = track.colour[1]
-                        marker.color.b = track.colour[2]
-                    else:
-                        marker.color.r = 0.0
-                        marker.color.g = 0.0
-                        marker.color.b = 0.0
-                    marker.color.a = 1.0
-                    marker.pose.position.x = ps.point.x
-                    marker.pose.position.y = ps.point.y
-                    marker.id = marker_id
+                        color[0] = track.color[0]
+                        color[1] = track.color[1]
+                        color[2] = track.color[2]
+                    position = [track.pos_x, track.pos_y, 0.15]
+                    scale = [0.05, 0.05, 0.10]
+                    marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER, position, scale, color)
+                    markers.markers.append(marker)
                     marker_id += 1
-                    marker.type = marker.CYLINDER
-                    marker.scale.x = 0.05
-                    marker.scale.y = 0.05
-                    marker.scale.z = 0.20
-                    marker.pose.position.z = 0.15
 
-                    self.marker_pub.publish(marker)
-
-            # # Clear previously published track markers
-            for m_id in range(marker_id, self.prev_track_marker_id):
-                marker = Marker()
-                marker.header.stamp = now
-                marker.header.frame_id = self.publish_people_frame
-                marker.ns = "object_tracked"
-                marker.id = m_id
-                marker.action = marker.DELETE
-                self.marker_pub.publish(marker)
-            self.prev_track_marker_id = marker_id
+            self.marker_array_pub.publish(markers)
+                    
 
     """
     Publish markers of tracked people to Rviz and to <people_tracked> topic
@@ -563,6 +544,8 @@ class KalmanMultiTrackerNode(Node):
                         new_person.pose.orientation.z = quaternion.z
                         new_person.pose.orientation.w = quaternion.w
                         new_person.id = person.id_num
+                        new_person.covariance = person.filtered_state_covariances[0][0]
+                        new_person.var_obs = person.var_obs
                         people_tracked_msg.people.append(new_person)
 
                         if (self.prev_person_id == new_person.id):
@@ -587,110 +570,66 @@ class KalmanMultiTrackerNode(Node):
             
         print(f"follow_target person id: {target_person.id}", flush=True)
 
-        # publish rviz markers       
+        # publish rviz markers
+        ns = "follow_target_person"
+        frame_id = self.publish_people_frame
+        markers = MarkerArray()
         # Cylinder for body
-        marker = Marker()
-        marker.header.frame_id = self.publish_people_frame
-        marker.header.stamp = now
-        marker.ns = "follow_target_person"
-        marker.color.r = 0.0
-        marker.color.g = 164.0
-        marker.color.b = 0.0
-        # marker.color.a = (rclpy.time.Duration(3) - (self.get_clock().now().to_msg() - person.last_seen)).nanoseconds()/rclpy.time.Duration(3).nanoseconds() + 0.1
-        marker.color.a = 1.0
-        marker.pose.position.x = target_person.pose.position.x 
-        marker.pose.position.y = target_person.pose.position.y
-        marker.id = marker_id
+        body_marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER,
+                                         [target_person.pose.position.x, target_person.pose.position.y, 0.8],
+                                         [0.2, 0.2, 1.2], [0.0, 0.39, 0.0, 1.0])
+        markers.markers.append(body_marker)
         marker_id += 1
-        marker.type = Marker.CYLINDER
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 1.2
-        marker.pose.position.z = 0.8
-        self.marker_pub.publish(marker)
         
         # Sphere for head shape
-        marker.type = Marker.SPHERE
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
-        marker.pose.position.z = 1.5
-        marker.id = marker_id
+        head_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
+                                         [target_person.pose.position.x, target_person.pose.position.y, 1.5],
+                                         [0.2, 0.2, 0.2], [0.0, 0.39, 0.0, 1.0])
+        markers.markers.append(head_marker)
         marker_id += 1
-        self.marker_pub.publish(marker)
         
         # Text showing person's ID number
-        marker.color.r = 1.0
-        marker.color.g = 1.0
-        marker.color.b = 1.0
-        marker.color.a = 1.0
-        marker.id = marker_id
+        text_marker = self.create_marker(marker_id, frame_id, ns, Marker.TEXT_VIEW_FACING,
+                                         [target_person.pose.position.x, target_person.pose.position.y, 1.7],
+                                         [0.0, 0.0, 0.2], [1.0, 1.0, 1.0, 1.0], text=str(target_person.id))
+        markers.markers.append(text_marker)
         marker_id += 1
-        marker.type = Marker.TEXT_VIEW_FACING
-        marker.text = str(target_person.id)
-        marker.scale.z = 0.2
-        marker.pose.position.z = 1.7
-        self.marker_pub.publish(marker)
         
-        # Arrow pointing in direction they're facing with magnitude proportional to speed
-        # marker.color.r = person.colour[0]
-        # marker.color.g = person.colour[1]
-        # marker.color.b = person.colour[2]
-        # # marker.color.a = ((rclpy.time.Duration(3.0) - (self.get_clock().now() - person.last_seen))/rclpy.time.Duration(3)) + 0.1
-        # marker.color.a = 1.0
-        # start_point = Point()
-        # end_point = Point()
-        # start_point.x = marker.pose.position.x 
-        # start_point.y = marker.pose.position.y 
-        # end_point.x = start_point.x + 0.5*person.vel_x
-        # end_point.y = start_point.y + 0.5*person.vel_y
-        # marker.pose.position.x = 0.
-        # marker.pose.position.y = 0.
-        # marker.pose.position.z = 0.1
-        # marker.id = marker_id
-        # marker_id += 1
-        # marker.type = Marker.ARROW
-        # marker.points.append(start_point)
-        # marker.points.append(end_point)
-        # marker.scale.x = 0.05
-        # marker.scale.y = 0.1
-        # marker.scale.z = 0.2
-        # self.marker_pub.publish(marker)
-
         # <self.confidence_percentile>% confidence bounds of person's position as an ellipse:
-        # cov = target_person.filtered_state_covariances[0][0] + target_person.var_obs # cov_xx == cov_yy == cov
-        # std = cov**(1./2.)
-        # gate_dist_euclid = scipy.stats.norm.ppf(1.0 - (1.0-self.confidence_percentile)/2., 0, std)
-        # marker.pose.position.x = target_person.pose.position.x 
-        # marker.pose.position.y = target_person.pose.position.y
-        # marker.type = Marker.SPHERE
-        # marker.scale.x = 2*gate_dist_euclid
-        # marker.scale.y = 2*gate_dist_euclid
-        # marker.scale.z = 0.01
-        # marker.color.r = 0.0
-        # marker.color.g = 164.0
-        # marker.color.b = 0.0
-        # marker.color.a = 0.1
-        # marker.pose.position.z = 0.0
-        # marker.id = marker_id
-        # marker_id += 1
-        # self.marker_pub.publish(marker)
+        cov = target_person.covariance + target_person.var_obs # cov_xx == cov_yy == cov
+        std = cov**(1./2.)
+        gate_dist_euclid = scipy.stats.norm.ppf(1.0 - (1.0-self.confidence_percentile)/2., 0, std)
+        confidence_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
+                                         [target_person.pose.position.x, target_person.pose.position.y, 0.0],
+                                         [2*gate_dist_euclid, 2*gate_dist_euclid, 0.01], [0.0, 0.39, 0.0, 0.2])
+        markers.markers.append(confidence_marker)
+        marker_id += 1
+        self.marker_array_pub.publish(markers)
         
-        # Clear previously published people markers
-        for m_id in range(marker_id, self.prev_person_marker_id):
-            marker = Marker()
-            marker.header.stamp = now
-            marker.header.frame_id = self.publish_people_frame
-            marker.ns = "follow_target_person"
-            marker.id = m_id
-            marker.action = marker.DELETE
-            self.marker_pub.publish(marker)
-        self.prev_person_marker_id = marker_id
-
         # Publish people tracked message
         self.people_tracked_pub.publish(people_tracked_msg)                    
 
-                        
+    def create_marker(self, marker_id, frame_id, ns, marker_type, position, scale, color, text=None):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = frame_id
+        marker.ns = ns
+        marker.id = marker_id
+        marker.type = marker_type
+        marker.pose.position.x = position[0]
+        marker.pose.position.y = position[1]
+        marker.pose.position.z = position[2]
+        marker.scale.x = scale[0]
+        marker.scale.y = scale[1]
+        marker.scale.z = scale[2]
+        marker.color.r = color[0]
+        marker.color.g = color[1]
+        marker.color.b = color[2]
+        marker.color.a = color[3]
+        if text:
+            marker.text = text
+        return marker
+
     def ToQuaternion (self, yaw, pitch, roll):
         cy = math.cos(yaw * 0.5)
         sy = math.sin(yaw * 0.5)
