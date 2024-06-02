@@ -36,6 +36,7 @@ def generate_launch_description():
             package="leg_tracker_ros2",
             executable="detect_leg_clusters",
             name="detect_leg_clusters",
+            output="screen", 
             parameters= [
                 {"forest_file" : forest_file_path},
                 {"scan_topic" : "/scan"},

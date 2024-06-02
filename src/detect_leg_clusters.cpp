@@ -209,16 +209,6 @@ private:
       if (clusters_published_counter == max_detected_clusters_) 
          break;
    }
-   // Clear remaining markers in Rviz
-   for (int id_num_diff = num_prev_markers_published_-id_num; id_num_diff > 0; id_num_diff--) {
-      visualization_msgs::msg::Marker m;
-      m.header.stamp = scan->header.stamp;
-      m.header.frame_id = fixed_frame_;
-      m.ns = "LEGS";
-      m.id = id_num_diff + id_num;
-      m.action = m.DELETE;
-      markers_pub_->publish(m);
-   }
    num_prev_markers_published_ = id_num; // For the next callback
 
    detected_leg_clusters_pub_->publish(detected_leg_clusters);

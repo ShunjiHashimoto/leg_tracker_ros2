@@ -482,7 +482,7 @@ class KalmanMultiTrackerNode(Node):
                         color[2] = track.color[2]
                     position = [track.pos_x, track.pos_y, 0.15]
                     scale = [0.05, 0.05, 0.10]
-                    marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER, position, scale, color)
+                    marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER, position, scale, color, now)
                     markers.markers.append(marker)
                     marker_id += 1
 
@@ -515,6 +515,7 @@ class KalmanMultiTrackerNode(Node):
         min_distance = 99.0 # [m]
         min_person_by_id = Person()
         min_person_by_distance = Person()
+        is_person  = False
         if not transform_available:
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else :
@@ -522,6 +523,7 @@ class KalmanMultiTrackerNode(Node):
                 if person.is_person == True:
                     if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people
                         # Get position in the <self.publish_people_frame> frame 
+                        is_person = True
                         ps = PointStamped()
                         ps.header.frame_id = self.fixed_frame
                         ps.header.stamp = tf_time.to_msg()
@@ -559,59 +561,60 @@ class KalmanMultiTrackerNode(Node):
                                 print(f"min_distance: {min_distance}", flush=True)
                                 min_person_by_distance = new_person
 
-        # min_personが前回のidと同じであれば、それに対して追従する。異なればそれに追従する
-        target_person = Person()
-        if is_same_id_flag == False:
-            target_person = min_person_by_distance
-        elif is_same_id_flag == True:
-            target_person = min_person_by_id
-        self.follow_target_person_pub.publish(target_person)
-        self.prev_person_id = target_person.id
-            
-        print(f"follow_target person id: {target_person.id}", flush=True)
+            # min_personが前回のidと同じであれば、それに対して追従する。異なればそれに追従する
+            if is_person:
+                target_person = Person()
+                if is_same_id_flag == False:
+                    target_person = min_person_by_distance
+                    print(f"By distance, follow_target person id: {target_person.id}, prev_person_id = {self.prev_person_id}", flush=True)
+                elif is_same_id_flag == True:
+                    target_person = min_person_by_id
+                    print(f"By id, follow_target person id: {target_person.id} , prev_person_id = {self.prev_person_id}", flush=True)
+                self.follow_target_person_pub.publish(target_person)
+                self.prev_person_id = target_person.id
 
-        # publish rviz markers
-        ns = "follow_target_person"
-        frame_id = self.publish_people_frame
-        markers = MarkerArray()
-        # Cylinder for body
-        body_marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER,
-                                         [target_person.pose.position.x, target_person.pose.position.y, 0.8],
-                                         [0.2, 0.2, 1.2], [0.0, 0.39, 0.0, 1.0])
-        markers.markers.append(body_marker)
-        marker_id += 1
+                # publish rviz markers
+                ns = "follow_target_person_marker"
+                frame_id = self.publish_people_frame
+                markers = MarkerArray()
+                # Cylinder for body
+                body_marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER,
+                                                [target_person.pose.position.x, target_person.pose.position.y, 0.8],
+                                                [0.2, 0.2, 1.2], [0.0, 0.39, 0.0, 1.0], now)
+                markers.markers.append(body_marker)
+                marker_id += 1
+                
+                # Sphere for head shape
+                head_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
+                                                [target_person.pose.position.x, target_person.pose.position.y, 1.5],
+                                                [0.2, 0.2, 0.2], [0.0, 0.39, 0.0, 1.0], now)
+                markers.markers.append(head_marker)
+                marker_id += 1
+                
+                # Text showing person's ID number
+                text_marker = self.create_marker(marker_id, frame_id, ns, Marker.TEXT_VIEW_FACING,
+                                                [target_person.pose.position.x, target_person.pose.position.y, 1.7],
+                                                [0.0, 0.0, 0.2], [1.0, 1.0, 1.0, 1.0], now, text=str(target_person.id)) 
+                markers.markers.append(text_marker)
+                marker_id += 1
+                
+                # <self.confidence_percentile>% confidence bounds of person's position as an ellipse:
+                cov = target_person.covariance + target_person.var_obs # cov_xx == cov_yy == cov
+                std = cov**(1./2.)
+                gate_dist_euclid = scipy.stats.norm.ppf(1.0 - (1.0-self.confidence_percentile)/2., 0, std)
+                confidence_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
+                                                [target_person.pose.position.x, target_person.pose.position.y, 0.0],
+                                                [2*gate_dist_euclid, 2*gate_dist_euclid, 0.01], [0.0, 0.39, 0.0, 0.2], now)
+                markers.markers.append(confidence_marker)
+                marker_id += 1
+                self.marker_array_pub.publish(markers)
         
-        # Sphere for head shape
-        head_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
-                                         [target_person.pose.position.x, target_person.pose.position.y, 1.5],
-                                         [0.2, 0.2, 0.2], [0.0, 0.39, 0.0, 1.0])
-        markers.markers.append(head_marker)
-        marker_id += 1
-        
-        # Text showing person's ID number
-        text_marker = self.create_marker(marker_id, frame_id, ns, Marker.TEXT_VIEW_FACING,
-                                         [target_person.pose.position.x, target_person.pose.position.y, 1.7],
-                                         [0.0, 0.0, 0.2], [1.0, 1.0, 1.0, 1.0], text=str(target_person.id))
-        markers.markers.append(text_marker)
-        marker_id += 1
-        
-        # <self.confidence_percentile>% confidence bounds of person's position as an ellipse:
-        cov = target_person.covariance + target_person.var_obs # cov_xx == cov_yy == cov
-        std = cov**(1./2.)
-        gate_dist_euclid = scipy.stats.norm.ppf(1.0 - (1.0-self.confidence_percentile)/2., 0, std)
-        confidence_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
-                                         [target_person.pose.position.x, target_person.pose.position.y, 0.0],
-                                         [2*gate_dist_euclid, 2*gate_dist_euclid, 0.01], [0.0, 0.39, 0.0, 0.2])
-        markers.markers.append(confidence_marker)
-        marker_id += 1
-        self.marker_array_pub.publish(markers)
-        
-        # Publish people tracked message
-        self.people_tracked_pub.publish(people_tracked_msg)                    
+                # Publish people tracked message
+                self.people_tracked_pub.publish(people_tracked_msg)                    
 
-    def create_marker(self, marker_id, frame_id, ns, marker_type, position, scale, color, text=None):
+    def create_marker(self, marker_id, frame_id, ns, marker_type, position, scale, color, now, text=None):
         marker = Marker()
-        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.stamp = now
         marker.header.frame_id = frame_id
         marker.ns = ns
         marker.id = marker_id
