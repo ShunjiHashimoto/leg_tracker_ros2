@@ -51,14 +51,14 @@ public:
  DetectLegClusters() : Node("detect_leg_clusters") { 
     num_prev_markers_published_ = 0;
     fixed_frame_ = this->declare_parameter<std::string>("fixed_frame", "base_link");
-    detection_threshold_ = this->declare_parameter<double>("detection_threshold", -1.0);
+    detection_threshold_ = this->declare_parameter<double>("detection_threshold", 0.1);
     cluster_dist_euclid_ = this->declare_parameter<double>("cluster_dist_euclid", 0.13);
     min_points_per_cluster_ = this->declare_parameter<int>("min_points_per_cluster", 3);
-    max_detect_distance_ = this->declare_parameter<double>("max_detect_distance", 10.0);
+    max_detect_distance_ = this->declare_parameter<double>("max_detect_distance", 2.5);
     max_detected_clusters_ = this->declare_parameter<int>("max_detected_clusters", -1);
     use_scan_header_stamp_for_tfs_ = this->declare_parameter<bool>("use_scan_header_stamp_for_tfs", false);
 
-    scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/scan", 10, std::bind(&DetectLegClusters::laserCallback, this, std::placeholders::_1));
+    scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/updated_scan", 10, std::bind(&DetectLegClusters::laserCallback, this, std::placeholders::_1));
     markers_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", 20);
     detected_leg_clusters_pub_ = this->create_publisher<leg_tracker_ros2::msg::LegArray>("detected_leg_clusters", 20);
     // random forestの読み込み
@@ -150,11 +150,15 @@ private:
             int positive_votes = result.at<int>(1, 1);
             int negative_votes = result.at<int>(1, 0);
             float probability_of_leg = positive_votes / static_cast<double>(positive_votes + negative_votes);
-            // Consider only clusters that have a confidence greater than detection_threshold_                 
+            // Consider only clusters that have a confiodence greater than detection_threshold_                 
+            // probability_of_leg = probability_of_leg - rel_dist/max_detect_distance_;
+            // 3だと1, 1だと0.777, 4だと-1
             if (probability_of_leg > detection_threshold_) { 
                // Transform cluster position to fixed frame
                // This should always be succesful because we've checked earlier if a tf was available
                bool transform_successful_2;
+               // RCLCPP_INFO(this->get_logger(), "propability: %lf", probability_of_leg);
+               // RCLCPP_INFO(this->get_logger(), "rel_dis: %lf", rel_dist);
                try {
                   tf_buffer_->transform(position, position, fixed_frame_);
                   transform_successful_2= true;

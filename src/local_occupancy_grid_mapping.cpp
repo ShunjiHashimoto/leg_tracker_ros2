@@ -34,7 +34,7 @@ public:
                             non_legs_sub_(this, "non_leg_clusters"),
                             sync(scan_sub_, non_legs_sub_, 100)
     {
-        scan_topic = this->declare_parameter<std::string>("scan_topic", "/scan");
+        scan_topic = this->declare_parameter<std::string>("scan_topic", "/updated_scan");
         fixed_frame_ = this->declare_parameter<std::string>("fixed_frame", "base_link");
         base_frame_ = this->declare_parameter<std::string>("base_frame", "base_link");
         auto local_map_topic = this->declare_parameter<std::string>("local_map_topic", "local_map");

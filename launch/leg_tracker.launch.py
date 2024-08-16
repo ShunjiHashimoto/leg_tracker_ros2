@@ -39,7 +39,7 @@ def generate_launch_description():
             output="screen", 
             parameters= [
                 {"forest_file" : forest_file_path},
-                {"scan_topic" : "/scan"},
+                {"scan_topic" : "/updated_scan"},
                 {"fixed_frame" : "laser"},
             ]
     )
@@ -51,9 +51,10 @@ def generate_launch_description():
         name="joint_leg_tracker",
         output="screen", 
         parameters=[
-            {"scan_topic" : "/scan"},
+            {"scan_topic" : "/updated_scan"},
             {"fixed_frame" : "laser"},
-            {"scan_frequency" : 40}
+            {"scan_frequency" : 40},
+            {"min_points_per_cluster" : 100}
         ]    
     )
 
@@ -73,10 +74,13 @@ def generate_launch_description():
         executable="occupancy_grid_mapping",
         name="occupancy_grid_mapping",
         parameters=[
-            {"scan_topic" : "/scan"},
+            {"scan_topic" : "/updated_scan"},
+            # {"fixed_frame" : "laser"},
+            # {"base_frame": "laser"},
             {"fixed_frame" : "imu_link"},
             {"base_frame": "imu_link"},
-            {'local_map_resolution':0.01},
+            {'local_map_resolution':0.1},
+            {'local_map_cells_per_side':100}
         ]    
     )
 
@@ -101,7 +105,7 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
-    ld.add_action(urg_node)
+    # ld.add_action(urg_node)
     ld.add_action(imu_node)
     ld.add_action(delayed_nodes)
 
