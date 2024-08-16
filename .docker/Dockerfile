@@ -14,7 +14,9 @@ RUN apt-get update && apt-get install -y \
   wget \
   tmux \
   x11-apps \
-  terminator 
+  terminator \
+  libfreetype6-dev \
+  libpng-dev
 
 # Install python packages
 RUN apt-get install -y \
@@ -30,13 +32,14 @@ RUN apt-get update && apt-get install -y \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install pip packages
-RUN pip install \
-  pyserial \
-  pykalman \
-  spidev \
-  rpi-lgpio \
-  gpiozero \
-  transforms3d
+RUN pip install --no-cache-dir \
+  pyserial==3.5 \
+  pykalman==0.9.7 \
+  spidev==3.6 \
+  rpi-lgpio==0.6 \
+  gpiozero==2.0.1 \
+  transforms3d==0.4.1 \
+  matplotlib==3.9.0
 
 # entrypoint.sh スクリプトをコンテナにコピー
 COPY entrypoint.sh /entrypoint.sh
