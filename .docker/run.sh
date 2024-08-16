@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DOCKER_IMAGE="leg_tracker_ros2:latest"
-CONTAINER_NAME="leg_tracker_ros2"
+CONTAINER_NAME="leg_tracker"
 
 docker run --rm -it \
     --env DISPLAY=localhost:11.0 \
