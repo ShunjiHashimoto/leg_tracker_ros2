@@ -58,7 +58,7 @@ public:
     max_detected_clusters_ = this->declare_parameter<int>("max_detected_clusters", -1);
     use_scan_header_stamp_for_tfs_ = this->declare_parameter<bool>("use_scan_header_stamp_for_tfs", false);
 
-    scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/updated_scan", 10, std::bind(&DetectLegClusters::laserCallback, this, std::placeholders::_1));
+    scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/scan", 10, std::bind(&DetectLegClusters::laserCallback, this, std::placeholders::_1));
     markers_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", 20);
     detected_leg_clusters_pub_ = this->create_publisher<leg_tracker_ros2::msg::LegArray>("detected_leg_clusters", 20);
     // random forestの読み込み
@@ -85,12 +85,33 @@ private:
  int max_detected_clusters_;
 
  int num_prev_markers_published_;
-
+ bool found_cluster_in_front_within_range = false;
+ geometry_msgs::msg::PointStamped first_cluster_position;
+ bool is_checked_first_cluster = false;
+ 
  rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr markers_pub_;
  rclcpp::Publisher<leg_tracker_ros2::msg::LegArray>::SharedPtr detected_leg_clusters_pub_;
  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
  std::shared_ptr<tf2_ros::TransformListener> tfl_{nullptr};
+
+ bool isClusterInFrontWithinRange(const geometry_msgs::msg::PointStamped& position) {
+   // Define the angular and distance thresholds
+   float min_angle_threshold = -0.261799; // -15 degrees
+   float max_angle_threshold = 0.261799;  // 15 degrees
+   float max_distance_threshold = max_detect_distance_; // Use the class member
+
+   // Calculate the angle of the cluster relative to the robot
+   float angle_to_cluster = atan2(position.point.y, position.point.x);
+
+   // Calculate the distance of the cluster from the robot
+   float distance_to_cluster = sqrt(pow(position.point.x, 2.0f) + pow(position.point.y, 2.0f));
+
+   // Check if the cluster is within the specified angular range and within the specified distance
+   return (angle_to_cluster >= min_angle_threshold && 
+            angle_to_cluster <= max_angle_threshold &&
+            distance_to_cluster <= max_distance_threshold);
+ }
  
  void laserCallback(const sensor_msgs::msg::LaserScan::SharedPtr scan) { 
    laser_processor::ScanProcessor processor(*scan);
@@ -128,6 +149,31 @@ private:
       RCLCPP_INFO(this->get_logger(), "Not publishing detected leg clusters because no tf was available");
    }
    else {
+
+      for (auto cluster = processor.getClusters().begin(); cluster != processor.getClusters().end(); ++cluster) {
+         geometry_msgs::msg::PointStamped position;
+         position.point.x = (*cluster)->getPosition().x();
+         position.point.y = (*cluster)->getPosition().y();
+         position.point.z = (*cluster)->getPosition().z();
+         position.header.stamp = tf_time;
+         position.header.frame_id = scan->header.frame_id;
+
+         // クラスタが指定された角度と距離範囲内にあるかチェック
+         if (isClusterInFrontWithinRange(position)) {
+               found_cluster_in_front_within_range = true;
+               first_cluster_position = position;
+               break;
+         }
+      }
+
+      if (!found_cluster_in_front_within_range) {
+         RCLCPP_INFO(this->get_logger(), "No clusters found in the specified angular and distance range.");
+         return;
+      }
+      else {
+         RCLCPP_INFO(this->get_logger(), "Success to clusters found in the specified angular and distance range.");
+      }
+
       for (std::list<laser_processor::SampleSet*>::iterator cluster = processor.getClusters().begin();
        cluster != processor.getClusters().end();
        cluster++) {
@@ -140,7 +186,7 @@ private:
          position.header.frame_id = scan->header.frame_id;
          float rel_dist = pow(position.point.x*position.point.x + position.point.y*position.point.y, 1./2.);
          // Only consider clusters within max_distance. 
-         if (rel_dist < max_detect_distance_) {
+         if (rel_dist < max_detect_distance_ && (first_cluster_position.point.x == position.point.x || is_checked_first_cluster)) {
             // Classify cluster using random forest classifier
             std::vector<float> f = cf_.calcClusterFeatures(*cluster, *scan);
             for (int k = 0; k < feat_count_; k++)
@@ -150,15 +196,19 @@ private:
             int positive_votes = result.at<int>(1, 1);
             int negative_votes = result.at<int>(1, 0);
             float probability_of_leg = positive_votes / static_cast<double>(positive_votes + negative_votes);
+
+             // クラスタの点群数と推論結果を表示
+             // TODO: クラスタの最初の登録処理を追加する
+            RCLCPP_INFO(this->get_logger(), "Cluster with %ld points, probability of leg: %f", (*cluster)->size(), probability_of_leg);
             // Consider only clusters that have a confiodence greater than detection_threshold_                 
             // probability_of_leg = probability_of_leg - rel_dist/max_detect_distance_;
-            // 3だと1, 1だと0.777, 4だと-1
+            if(!is_checked_first_cluster){
+               probability_of_leg += 1.0;
+            }
             if (probability_of_leg > detection_threshold_) { 
                // Transform cluster position to fixed frame
                // This should always be succesful because we've checked earlier if a tf was available
                bool transform_successful_2;
-               // RCLCPP_INFO(this->get_logger(), "propability: %lf", probability_of_leg);
-               // RCLCPP_INFO(this->get_logger(), "rel_dis: %lf", rel_dist);
                try {
                   tf_buffer_->transform(position, position, fixed_frame_);
                   transform_successful_2= true;
@@ -175,6 +225,25 @@ private:
                   leg_set.insert(new_leg);
                }
             }
+            if(!is_checked_first_cluster){
+               is_checked_first_cluster = true;
+               RCLCPP_INFO(this->get_logger(), "Success to first cluster check");
+               RCLCPP_INFO(this->get_logger(), "iCluster with %ld points, probability of leg: %f", (*cluster)->size(), probability_of_leg);
+               break;
+            }
+         }
+         else {
+            RCLCPP_INFO(this->get_logger(), "Not yet first cluster check or far distance");
+         }
+
+      for (std::list<laser_processor::SampleSet*>::iterator cluster = processor.getClusters().begin();
+       cluster != processor.getClusters().end();
+       cluster++) {
+         // Get position of cluster in laser frame
+         geometry_msgs::msg::PointStamped position;
+         position.point.x = (*cluster)->getPosition().x();
+         position.point.y = (*cluster)->getPosition().y();
+         position.point.z = (*cluster)->getPosition().z();
          }
       }
    }       
@@ -204,10 +273,11 @@ private:
       m.scale.z = 0.13;
       m.color.a = 1;
       m.color.r = 0;
-      m.color.g = leg.confidence;
+      m.color.g = 0;
       m.color.b = leg.confidence;
       markers_pub_->publish(m);
    
+      RCLCPP_INFO(this->get_logger(), "Marker ID: %d, pos_x: %lf, pos_y: %lf, Probability: %f", m.id, m.pose.position.x, m.pose.position.y, leg.confidence);
       // Comparison using '==' and not '>=' is important, as it allows <max_detected_clusters_>=-1 
       // to publish infinite markers
       if (clusters_published_counter == max_detected_clusters_) 
