@@ -267,6 +267,7 @@ class KalmanMultiTrackerNode(Node):
                 new_detected_cluster.in_free_space_bool = True
             else:
                 new_detected_cluster.in_free_space_bool = False
+            print(f"free-space; {cluster.in_free_space_bool}, {cluster.confidence}", flush=True)
             detected_clusters.append(new_detected_cluster)
             detected_clusters_set.add(new_detected_cluster)
 
@@ -460,6 +461,7 @@ class KalmanMultiTrackerNode(Node):
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else:
             for track in self.objects_tracked:
+                # 人でない場合は、円柱マーカは表示しない
                 if track.is_person:
                     continue
 
@@ -521,6 +523,7 @@ class KalmanMultiTrackerNode(Node):
         else :
             for person in self.objects_tracked:
                 if person.is_person == True:
+                    print("now testing", flush=True)
                     if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people
                         # Get position in the <self.publish_people_frame> frame 
                         is_person = True
@@ -529,6 +532,7 @@ class KalmanMultiTrackerNode(Node):
                         ps.header.stamp = tf_time.to_msg()
                         ps.point.x = person.pos_x
                         ps.point.y = person.pos_y
+                        print(f"pos_x: {ps.point.x}, pos_y: {ps.point.y} , person_id = {self.prev_person_id}", flush=True)
                         try:
                             ps = self.buffer.transform(ps, self.publish_people_frame)
                         except:
@@ -566,10 +570,10 @@ class KalmanMultiTrackerNode(Node):
                 target_person = Person()
                 if is_same_id_flag == False:
                     target_person = min_person_by_distance
-                    print(f"By distance, follow_target person id: {target_person.id}, prev_person_id = {self.prev_person_id}", flush=True)
+                    print(f"By distance, follow_target person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y} , prev_person_id = {self.prev_person_id}", flush=True)
                 elif is_same_id_flag == True:
                     target_person = min_person_by_id
-                    print(f"By id, follow_target person id: {target_person.id} , prev_person_id = {self.prev_person_id}", flush=True)
+                    print(f"By id, follow_target person id: {target_person.id} , pos: {target_person.pose.position.x},  pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}", flush=True)
                 self.follow_target_person_pub.publish(target_person)
                 self.prev_person_id = target_person.id
 
