@@ -267,7 +267,7 @@ class KalmanMultiTrackerNode(Node):
                 new_detected_cluster.in_free_space_bool = True
             else:
                 new_detected_cluster.in_free_space_bool = False
-            print(f"free-space; {cluster.in_free_space_bool}, {cluster.confidence}", flush=True)
+            # print(f"free-space; {cluster.in_free_space_bool}, {cluster.confidence}", flush=True)
             detected_clusters.append(new_detected_cluster)
             detected_clusters_set.add(new_detected_cluster)
 
@@ -522,6 +522,7 @@ class KalmanMultiTrackerNode(Node):
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else :
             for person in self.objects_tracked:
+                print("checking is person", flush=True)
                 if person.is_person == True:
                     print("now testing", flush=True)
                     if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people

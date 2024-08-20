@@ -165,6 +165,7 @@ private:
                 tf2::Vector3 c_pos = (*c_iter)->getPosition();
                 // Check every point in the <non_legs> message to see
                 // if the scan cluster is within an epsilon distance of the cluster
+                // 人の足ではないクラスタに近いクラスタは人の足ではないとする
                 for (std::vector<geometry_msgs::msg::Point>::iterator non_leg = non_legs.begin(); non_leg != non_legs.end(); ++non_leg) {
                     double dist = sqrt(pow((c_pos.x() - (*non_leg).x), 2) + pow((c_pos.y() - (*non_leg).y), 2));
                     if (dist < 0.1) {
