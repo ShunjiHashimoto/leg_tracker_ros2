@@ -47,6 +47,7 @@ public:
         width_ = this->declare_parameter<int>("local_map_cells_per_side", 400);
         cluster_dist_euclid_ = this->declare_parameter<double>("cluster_dist_euclid",  0.13); // クラスタとしてみなす最小距離位、13cm以内であれば同じクラスタ
         min_points_per_cluster_ = this->declare_parameter<int>("min_points_per_cluster",  3); 
+        max_points_per_cluster_ = this->declare_parameter<int>("max_points_per_cluster",  100); 
 
         // 占有格子マップの初期化処理
         l0_ = logit(UNKNOWN);
@@ -109,6 +110,7 @@ private:
 
     double cluster_dist_euclid_;
     int min_points_per_cluster_;
+    int max_points_per_cluster_;
  
     void laserAndLegCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& scan_msg, const leg_tracker_ros2::msg::LegArray::ConstSharedPtr& non_leg_clusters) {
         bool transform_available;
@@ -159,7 +161,7 @@ private:
             sensor_msgs::msg::LaserScan scan = *scan_msg;
             laser_processor::ScanProcessor processor(scan);
             processor.splitConnected(cluster_dist_euclid_);
-            processor.removeLessThan(min_points_per_cluster_);
+            processor.removeLessThan(min_points_per_cluster_, max_points_per_cluster_);
             for (std::list<laser_processor::SampleSet*>::iterator c_iter = processor.getClusters().begin(); c_iter != processor.getClusters().end(); ++c_iter) {
                 bool is_cluster_human = true;
                 tf2::Vector3 c_pos = (*c_iter)->getPosition();
