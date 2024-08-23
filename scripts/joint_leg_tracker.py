@@ -159,6 +159,7 @@ class KalmanMultiTrackerNode(Node):
         self.in_free_space_threshold = self.get_parameter_or("in_free_space_threshold", 0.06)
         self.confidence_percentile = self.get_parameter_or("confidence_percentile", 0.90)
         self.max_std = self.get_parameter_or("max_std", 0.9)
+        self.debug = self.get_parameter_or("debug", False)
 
         self.mahalanobis_dist_gate = scipy.stats.norm.ppf (1.0 - (1.0-self.confidence_percentile)/2., 0, 1.0)
         self.max_cov = self.max_std**2
@@ -267,10 +268,9 @@ class KalmanMultiTrackerNode(Node):
                 new_detected_cluster.in_free_space_bool = True
             else:
                 new_detected_cluster.in_free_space_bool = False
-            # print(f"free-space; {cluster.in_free_space_bool}, {cluster.confidence}", flush=True)
             detected_clusters.append(new_detected_cluster)
             detected_clusters_set.add(new_detected_cluster)
-
+        if self.debug: print(f"leg cluster size: {len(detected_clusters_msg.legs)}")
         to_duplicate = set()
         # propogated: 伝搬された
         propogated = copy.deepcopy(self.objects_tracked)
@@ -522,9 +522,7 @@ class KalmanMultiTrackerNode(Node):
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else :
             for person in self.objects_tracked:
-                print("checking is person", flush=True)
                 if person.is_person == True:
-                    print("now testing", flush=True)
                     if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people
                         # Get position in the <self.publish_people_frame> frame 
                         is_person = True
@@ -533,7 +531,7 @@ class KalmanMultiTrackerNode(Node):
                         ps.header.stamp = tf_time.to_msg()
                         ps.point.x = person.pos_x
                         ps.point.y = person.pos_y
-                        print(f"pos_x: {ps.point.x}, pos_y: {ps.point.y} , person_id = {self.prev_person_id}", flush=True)
+                        if self.debug: print(f"pos_x: {ps.point.x}, pos_y: {ps.point.y} , person_id = {self.prev_person_id}", flush=True)
                         try:
                             ps = self.buffer.transform(ps, self.publish_people_frame)
                         except:

@@ -54,9 +54,11 @@ public:
     detection_threshold_ = this->declare_parameter<double>("detection_threshold", 0.1);
     cluster_dist_euclid_ = this->declare_parameter<double>("cluster_dist_euclid", 0.13);
     min_points_per_cluster_ = this->declare_parameter<int>("min_points_per_cluster", 3);
+    max_points_per_cluster_ = this->declare_parameter<int>("max_points_per_cluster", 100);
     max_detect_distance_ = this->declare_parameter<double>("max_detect_distance", 2.5);
     max_detected_clusters_ = this->declare_parameter<int>("max_detected_clusters", -1);
     use_scan_header_stamp_for_tfs_ = this->declare_parameter<bool>("use_scan_header_stamp_for_tfs", false);
+    debug_ = this->declare_parameter<bool>("debug", false);
 
     scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>("/scan", 10, std::bind(&DetectLegClusters::laserCallback, this, std::placeholders::_1));
     markers_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", 20);
@@ -80,6 +82,7 @@ private:
  int feat_count_;
  double cluster_dist_euclid_;
  int min_points_per_cluster_;
+ int max_points_per_cluster_;
  double max_detect_distance_;
  bool use_scan_header_stamp_for_tfs_;
  int max_detected_clusters_;
@@ -88,6 +91,7 @@ private:
  bool found_cluster_in_front_within_range = false;
  geometry_msgs::msg::PointStamped first_cluster_position;
  bool is_checked_first_cluster = false;
+ bool debug_ = false;
  
  rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr markers_pub_;
@@ -116,7 +120,7 @@ private:
  void laserCallback(const sensor_msgs::msg::LaserScan::SharedPtr scan) { 
    laser_processor::ScanProcessor processor(*scan);
    processor.splitConnected(cluster_dist_euclid_);
-   processor.removeLessThan(min_points_per_cluster_);
+   processor.removeLessThan(min_points_per_cluster_, max_points_per_cluster_);
    // random forestに必要なOpenCV行列
    cv::Mat tmp_mat(1, feat_count_, CV_32FC1);
    leg_tracker_ros2::msg::LegArray detected_leg_clusters; 
@@ -165,13 +169,14 @@ private:
                break;
          }
       }
-
-      if (!found_cluster_in_front_within_range) {
-         RCLCPP_INFO(this->get_logger(), "No clusters found in the specified angular and distance range.");
-         return;
-      }
-      else {
-         RCLCPP_INFO(this->get_logger(), "Success to clusters found in the specified angular and distance range.");
+      if(debug_) {
+         if (!found_cluster_in_front_within_range) {
+            RCLCPP_INFO(this->get_logger(), "No clusters found in the specified angular and distance range.");
+            return;
+         }
+         else {
+            RCLCPP_INFO(this->get_logger(), "Success to clusters found in the specified angular and distance range.");
+         }
       }
 
       for (std::list<laser_processor::SampleSet*>::iterator cluster = processor.getClusters().begin();
@@ -203,6 +208,7 @@ private:
             // Consider only clusters that have a confiodence greater than detection_threshold_                 
             // probability_of_leg = probability_of_leg - rel_dist/max_detect_distance_;
             if(!is_checked_first_cluster){
+               // TODO: まず人の足として認識されていないクラスタのパラメータ調整
                probability_of_leg += 1.0;
             }
             if (probability_of_leg > detection_threshold_) { 
@@ -227,8 +233,10 @@ private:
             }
             if(!is_checked_first_cluster){
                is_checked_first_cluster = true;
-               RCLCPP_INFO(this->get_logger(), "Success to first cluster check");
-               RCLCPP_INFO(this->get_logger(), "iCluster with %ld points, probability of leg: %f", (*cluster)->size(), probability_of_leg);
+               if(debug_){
+                  RCLCPP_INFO(this->get_logger(), "Success to first cluster check");
+                  RCLCPP_INFO(this->get_logger(), "iCluster with %ld points, probability of leg: %f", (*cluster)->size(), probability_of_leg);
+               }
                break;
             }
          }
@@ -276,8 +284,8 @@ private:
       m.color.g = 0;
       m.color.b = leg.confidence;
       markers_pub_->publish(m);
-   
-      RCLCPP_INFO(this->get_logger(), "Marker ID: %d, pos_x: %lf, pos_y: %lf, Probability: %f", m.id, m.pose.position.x, m.pose.position.y, leg.confidence);
+      
+      if(debug_) RCLCPP_INFO(this->get_logger(), "Marker ID: %d, pos_x: %lf, pos_y: %lf, Probability: %f", m.id, m.pose.position.x, m.pose.position.y, leg.confidence);
       // Comparison using '==' and not '>=' is important, as it allows <max_detected_clusters_>=-1 
       // to publish infinite markers
       if (clusters_published_counter == max_detected_clusters_) 
