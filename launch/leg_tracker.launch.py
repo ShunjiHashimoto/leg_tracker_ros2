@@ -99,14 +99,14 @@ def generate_launch_description():
     )
 
     # Include URG Node2 Launch File
-    # pkg_prefix = get_package_share_directory('urg_node2')
-    # launch_path = join(pkg_prefix, 'launch/urg_node2.launch.py')
-    # urg_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
+    pkg_prefix = get_package_share_directory('urg_node2')
+    launch_path = join(pkg_prefix, 'launch/urg_node2.launch.py')
+    urg_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
 
     # Include URG Node2 Launch File
-    # pkg_prefix = get_package_share_directory('ros2_razor_imu')
-    # launch_path = join(pkg_prefix, 'launch/razor_pub.launch.py')
-    # imu_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
+    pkg_prefix = get_package_share_directory('ros2_razor_imu')
+    launch_path = join(pkg_prefix, 'launch/razor_pub.launch.py')
+    imu_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
     
     main_nodes.add_action(detect_leg_clusters_node)
     main_nodes.add_action(joint_leg_tracker_node)
@@ -114,13 +114,13 @@ def generate_launch_description():
     # main_nodes.add_action(inflated_human_scan_node)
     
     delayed_nodes = TimerAction(
-        period=1.0,
+        period=5.0,
         actions=[main_nodes]
     )
 
     ld = LaunchDescription()
-    # ld.add_action(urg_node)
-    # ld.add_action(imu_node)
+    ld.add_action(urg_node)
+    ld.add_action(imu_node)
     ld.add_action(delayed_nodes)
 
     return ld 

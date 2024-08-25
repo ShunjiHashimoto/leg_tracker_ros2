@@ -53,7 +53,7 @@ class ObjectTracked:
         self.is_person = is_person
         self.deleted = False
         self.in_free_space = in_free_space
-        self.obstacle_speed_threshold = 0.1
+        self.obstacle_speed_threshold = 0.25
         self.vel_history = []  # 速度の履歴を保存するリスト
         self.is_static = False  # 静的かどうかのフラグ
 
@@ -133,13 +133,13 @@ class ObjectTracked:
         current_speed = math.sqrt(self.vel_x**2 + self.vel_y**2)
         self.vel_history.append(current_speed)
         # 速度の履歴が一定数を超えたら、最も古いデータを削除
-        if len(self.vel_history) > 10:  # 例: 直近5回分の速度を保存
+        if len(self.vel_history) > 50:  # 例: 直近5回分の速度を保存
             self.vel_history.pop(0)
         # 速度の平均値を計算
         avg_speed = sum(self.vel_history) / len(self.vel_history)
         # 平均速度が閾値以下であれば静的障害物と判定
         self.is_static = avg_speed < self.obstacle_speed_threshold
-        if self.is_static:
+        if not self.is_static:
             print(f"Object {self.id_num} is considered static based on average speed {avg_speed}")
 
 class KalmanMultiTrackerNode(Node):    
@@ -482,8 +482,8 @@ class KalmanMultiTrackerNode(Node):
                 if track.is_static:
                     continue
                 # 人でない場合は、円柱マーカは表示しない
-                if track.is_person:
-                    continue
+                #if track.is_person:
+                #    continue
 
                 if self.publish_occluded or track.seen_in_current_scan:  
                     ps = PointStamped()
@@ -542,7 +542,7 @@ class KalmanMultiTrackerNode(Node):
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else :
             for person in self.objects_tracked:
-                if person.is_person == True:
+                if person.is_person == True and not person.is_static:
                     if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people
                         # Get position in the <self.publish_people_frame> frame 
                         is_person = True
