@@ -53,6 +53,9 @@ class ObjectTracked:
         self.is_person = is_person
         self.deleted = False
         self.in_free_space = in_free_space
+        self.obstacle_speed_threshold = 0.1
+        self.vel_history = []  # 速度の履歴を保存するリスト
+        self.is_static = False  # 静的かどうかのフラグ
 
         # 定常速度モデルのカルマンフィルタを使って人を追跡する  
         # LiDARデータの値は正確であるため観測値をより信頼するように式を立てる  
@@ -125,6 +128,19 @@ class ObjectTracked:
         self.pos_y = self.filtered_state_means[1]
         self.vel_x = self.filtered_state_means[2]
         self.vel_y = self.filtered_state_means[3]
+        
+        # 静的障害物の判定
+        current_speed = math.sqrt(self.vel_x**2 + self.vel_y**2)
+        self.vel_history.append(current_speed)
+        # 速度の履歴が一定数を超えたら、最も古いデータを削除
+        if len(self.vel_history) > 10:  # 例: 直近5回分の速度を保存
+            self.vel_history.pop(0)
+        # 速度の平均値を計算
+        avg_speed = sum(self.vel_history) / len(self.vel_history)
+        # 平均速度が閾値以下であれば静的障害物と判定
+        self.is_static = avg_speed < self.obstacle_speed_threshold
+        if self.is_static:
+            print(f"Object {self.id_num} is considered static based on average speed {avg_speed}")
 
 class KalmanMultiTrackerNode(Node):    
     max_cost = 9999999
@@ -397,6 +413,8 @@ class KalmanMultiTrackerNode(Node):
                 or (track_1.is_person and track_2.is_person) 
                 or track_1.confidence < self.confidence_threshold_to_maintain_track 
                 or track_2.confidence < self.confidence_threshold_to_maintain_track
+                or track_1.is_static  # 静的障害物のチェックを追加
+                or track_2.is_static  # 静的障害物のチェックを追加
                 ):
                     leg_pairs_to_delete.add((track_1, track_2))
                     continue
@@ -461,6 +479,8 @@ class KalmanMultiTrackerNode(Node):
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else:
             for track in self.objects_tracked:
+                if track.is_static:
+                    continue
                 # 人でない場合は、円柱マーカは表示しない
                 if track.is_person:
                     continue
