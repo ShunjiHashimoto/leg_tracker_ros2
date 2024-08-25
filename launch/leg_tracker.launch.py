@@ -44,7 +44,7 @@ def generate_launch_description():
                 {'detection_threshold': 0.2},
                 {"min_points_per_cluster" : 10},
                 {"max_points_per_cluster": 100}, 
-                {'max_detected_clusters': -1},
+                {'max_detected_clusters': 10},
                 {'publish_occluded': True},
                 {'debug': False},
             ]
@@ -64,7 +64,7 @@ def generate_launch_description():
             {"min_points_per_cluster" : 10},
             {"max_points_per_cluster": 100}, 
             {'max_detect_distance': 2.5},
-            {'max_detected_clusters': 20},
+            {'max_detected_clusters': 10},
             {'dist_travelled_together_to_initiate_leg_pair': 0.5},
             {'debug': False},
         ]
@@ -120,8 +120,8 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
-    # ld.add_action(urg_node)
-    # ld.add_action(imu_node)
+    ld.add_action(urg_node)
+    ld.add_action(imu_node)
     ld.add_action(delayed_nodes)
 
     return ld 
