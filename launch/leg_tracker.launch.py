@@ -45,6 +45,7 @@ def generate_launch_description():
                 {"min_points_per_cluster" : 10},
                 {"max_points_per_cluster": 100}, 
                 {'max_detected_clusters': -1},
+                {'publish_occluded': True},
                 {'debug': False},
             ]
     )
@@ -119,8 +120,8 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
-    ld.add_action(urg_node)
-    ld.add_action(imu_node)
+    # ld.add_action(urg_node)
+    # ld.add_action(imu_node)
     ld.add_action(delayed_nodes)
 
     return ld 

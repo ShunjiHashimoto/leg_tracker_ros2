@@ -205,7 +205,7 @@ private:
 
              // クラスタの点群数と推論結果を表示
              // TODO: クラスタの最初の登録処理を追加する
-            RCLCPP_INFO(this->get_logger(), "Cluster with %ld points, probability of leg: %f", (*cluster)->size(), probability_of_leg);
+            // RCLCPP_INFO(this->get_logger(), "Cluster with %ld points, probability of leg: %f", (*cluster)->size(), probability_of_leg);
             // Consider only clusters that have a confiodence greater than detection_threshold_                 
             // probability_of_leg = probability_of_leg - rel_dist/max_detect_distance_;
             if(!is_checked_first_cluster){
@@ -241,9 +241,9 @@ private:
                break;
             }
          }
-         else {
-            RCLCPP_INFO(this->get_logger(), "Not yet first cluster check or far distance");
-         }
+         // else {
+            // RCLCPP_INFO(this->get_logger(), "Not yet first cluster check or far distance");
+         // }
 
       for (std::list<laser_processor::SampleSet*>::iterator cluster = processor.getClusters().begin();
        cluster != processor.getClusters().end();

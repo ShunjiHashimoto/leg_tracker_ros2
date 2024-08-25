@@ -535,14 +535,16 @@ class KalmanMultiTrackerNode(Node):
 
         marker_id = 0
         min_distance = 99.0 # [m]
-        min_person_by_id = Person()
-        min_person_by_distance = Person()
+        highest_score = 0
+        # min_person_by_id = Person()
+        # min_person_by_distance = Person()
+        best_person = Person()
         is_person  = False
         if not transform_available:
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else :
             for person in self.objects_tracked:
-                if person.is_person == True and not person.is_static:
+                if person.is_person == True:
                     if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people
                         # Get position in the <self.publish_people_frame> frame 
                         is_person = True
@@ -572,29 +574,53 @@ class KalmanMultiTrackerNode(Node):
                         new_person.covariance = person.filtered_state_covariances[0][0]
                         new_person.var_obs = person.var_obs
                         people_tracked_msg.people.append(new_person)
+                        
+                        # 人らしさのスコアを計算
+                        score = person.confidence  # 信頼度をベースにする
+                        print(f"first score: {score}", flush=True)
+                        if not person.is_static:  # 静的でない場合はスコアを加算
+                            score += 0.5
+                            print(f"is static score  {score}", flush=True)
+                        # 同じIDの場合、大きくスコアを加算する
+                        if self.prev_person_id == new_person.id:
+                            score += 0.5  # 大きくスコアを加算
+                            print(f"same id score  {score}" ,flush=True)
 
-                        if (self.prev_person_id == new_person.id):
-                            is_same_id_flag = True
-                            min_person_by_id = new_person
+                        distance = math.sqrt(math.pow(ps.point.x, 2) + math.pow(ps.point.y, 2))
+                        score -= distance / 5.0  # 距離が近いほどスコアを高くする
+                        print(f"distance score: {distance / 10.0}", flush=True)
 
-                        if is_same_id_flag == False:
-                            distance = math.sqrt(math.pow(ps.point.x, 2) + math.pow(ps.point.y, 2))
-                            if (min_distance > distance):
-                                min_distance = distance
-                                print(f"min_distance: {min_distance}", flush=True)
-                                min_person_by_distance = new_person
+                        if score > highest_score:  # スコアが最も高いクラスタを選択
+                            highest_score = score
+                            best_person = new_person
+
+                        # if (self.prev_person_id == new_person.id):
+                        #     is_same_id_flag = True
+                        #     min_person_by_id = new_person
+
+                        # if is_same_id_flag == False:
+                        #     distance = math.sqrt(math.pow(ps.point.x, 2) + math.pow(ps.point.y, 2))
+                        #     if (min_distance > distance):
+                        #         min_distance = distance
+                        #         print(f"min_distance: {min_distance}", flush=True)
+                        #         min_person_by_distance = new_person
 
             # min_personが前回のidと同じであれば、それに対して追従する。異なればそれに追従する
-            if is_person:
-                target_person = Person()
-                if is_same_id_flag == False:
-                    target_person = min_person_by_distance
-                    print(f"By distance, follow_target person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y} , prev_person_id = {self.prev_person_id}", flush=True)
-                elif is_same_id_flag == True:
-                    target_person = min_person_by_id
-                    print(f"By id, follow_target person id: {target_person.id} , pos: {target_person.pose.position.x},  pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}", flush=True)
+            if best_person and highest_score > 0:
+                target_person = best_person
+                print(f"Following the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}", flush=True)
+
                 self.follow_target_person_pub.publish(target_person)
                 self.prev_person_id = target_person.id
+
+            # if is_person:
+                # target_person = Person()
+                # if is_same_id_flag == False:
+                #     target_person = min_person_by_distance
+                #     print(f"By distance, follow_target person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y} , prev_person_id = {self.prev_person_id}", flush=True)
+                # elif is_same_id_flag == True:
+                #     target_person = min_person_by_id
+                #     print(f"By id, follow_target person id: {target_person.id} , pos: {target_person.pose.position.x},  pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}", flush=True)
 
                 # publish rviz markers
                 ns = "follow_target_person_marker"
