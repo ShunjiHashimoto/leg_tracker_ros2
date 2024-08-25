@@ -56,6 +56,7 @@ class ObjectTracked:
         self.obstacle_speed_threshold = 0.25
         self.vel_history = []  # 速度の履歴を保存するリスト
         self.is_static = False  # 静的かどうかのフラグ
+        self.is_single_leg = False  # 片足のみのトラックかどうかのフラグ 追加
 
         # 定常速度モデルのカルマンフィルタを使って人を追跡する  
         # LiDARデータの値は正確であるため観測値をより信頼するように式を立てる  
@@ -329,16 +330,19 @@ class KalmanMultiTrackerNode(Node):
             if propogated_track.is_person:
                 # matched_tracksの中に同じ2つの値に紐付けられた異なるobject_detectedの値が存在する。これらは右足、左足として認識され、その中心を追跡対象とする
                 if propogated_track in matched_tracks and duplicates[propogated_track] in matched_tracks:
+                    propogated_track.is_single_leg = False
                     md_1 = matched_tracks[propogated_track]
                     md_2 = matched_tracks[duplicates[propogated_track]]
                     matched_detection = DetectedCluster((md_1.pos_x+md_2.pos_x)/2., (md_1.pos_y+md_2.pos_y)/2., (md_1.confidence+md_2.confidence)/2., (md_1.in_free_space+md_2.in_free_space)/2.)
                 # matched_tracksの中に一つの値でしか紐付けられていない場合は、それを片足とみなし、もう一つはtracksを更新した予測値をもとに平均値を取る
                 elif propogated_track in matched_tracks:
+                    propogated_track.is_single_leg = True
                     md_1 = matched_tracks[propogated_track]
                     md_2 = duplicates[propogated_track]
                     matched_detection = DetectedCluster((md_1.pos_x+md_2.pos_x)/2., (md_1.pos_y+md_2.pos_y)/2., md_1.confidence, md_1.in_free_space)
                 # 同様にして、片足しか検出されない場合は、検出された片足と、予測値をもとに平均値を取る
                 elif duplicates[propogated_track] in matched_tracks:
+                    propogated_track.is_single_leg = True
                     md_1 = matched_tracks[duplicates[propogated_track]]
                     md_2 = propogated_track
                     matched_detection = DetectedCluster((md_1.pos_x+md_2.pos_x)/2., (md_1.pos_y+md_2.pos_y)/2., md_1.confidence, md_1.in_free_space)
@@ -413,8 +417,7 @@ class KalmanMultiTrackerNode(Node):
                 or (track_1.is_person and track_2.is_person) 
                 or track_1.confidence < self.confidence_threshold_to_maintain_track 
                 or track_2.confidence < self.confidence_threshold_to_maintain_track
-                or track_1.is_static  # 静的障害物のチェックを追加
-                or track_2.is_static  # 静的障害物のチェックを追加
+                or (track_1.is_static and track_2.is_static)  # 静的障害物のチェックを追加
                 ):
                     leg_pairs_to_delete.add((track_1, track_2))
                     continue
@@ -533,13 +536,19 @@ class KalmanMultiTrackerNode(Node):
             tf_time = self.get_clock().now()
             transform_available = self.buffer.can_transform(self.fixed_frame, self.publish_people_frame, tf_time)
 
+        # 重みの定義
+        id_weight = 0.5
+        distance_weight = 1.0
+        speed_weight = 2.0
+        static_penalty = -0.7 # 静的オブジェクトに対するペナルティ
+        single_leg_penalty = -0.5  # 片足のみしか検出しない場合は-0.5 のペナルティを追加
+
         marker_id = 0
-        min_distance = 99.0 # [m]
+        highest_score = -float('inf')
+        best_person = None
         highest_score = 0
-        # min_person_by_id = Person()
-        # min_person_by_distance = Person()
-        best_person = Person()
         is_person  = False
+
         if not transform_available:
             self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
         else :
@@ -576,51 +585,47 @@ class KalmanMultiTrackerNode(Node):
                         people_tracked_msg.people.append(new_person)
                         
                         # 人らしさのスコアを計算
-                        score = person.confidence  # 信頼度をベースにする
+                        speed = math.sqrt(person.vel_x ** 2 + person.vel_y ** 2)
+
+                        # スコアの初期値は信頼度に基づく
+                        score = person.confidence * id_weight
                         print(f"first score: {score}", flush=True)
-                        if not person.is_static:  # 静的でない場合はスコアを加算
-                            score += 0.5
+                        
+                        # 片足しか検出されない場合はべナルティ
+                        if person.is_single_leg:
+                            score += single_leg_penalty
+                            print(f"single leg penalty applied: {single_leg_penalty}", flush=True)
+                        
+                        # 静的である場合はペナルティ
+                        if  person.is_static:
+                            score += static_penalty 
                             print(f"is static score  {score}", flush=True)
+                        
                         # 同じIDの場合、大きくスコアを加算する
                         if self.prev_person_id == new_person.id:
-                            score += 0.5  # 大きくスコアを加算
+                            score += id_weight
                             print(f"same id score  {score}" ,flush=True)
 
+                        # 距離に基づくペナルティ
                         distance = math.sqrt(math.pow(ps.point.x, 2) + math.pow(ps.point.y, 2))
-                        score -= distance / 5.0  # 距離が近いほどスコアを高くする
-                        print(f"distance score: {distance / 10.0}", flush=True)
+                        score -= distance * distance_weight
+                        print(f"distance score: {distance * distance_weight}", flush=True)
+                        
+                        # 速度に基づくスコア加算
+                        score += speed * speed_weight
+                        print(f"speed score: {speed * speed_weight}", flush=True)
 
-                        if score > highest_score:  # スコアが最も高いクラスタを選択
+                        # 最高スコアの人物を選択
+                        if score > highest_score:
                             highest_score = score
                             best_person = new_person
 
-                        # if (self.prev_person_id == new_person.id):
-                        #     is_same_id_flag = True
-                        #     min_person_by_id = new_person
-
-                        # if is_same_id_flag == False:
-                        #     distance = math.sqrt(math.pow(ps.point.x, 2) + math.pow(ps.point.y, 2))
-                        #     if (min_distance > distance):
-                        #         min_distance = distance
-                        #         print(f"min_distance: {min_distance}", flush=True)
-                        #         min_person_by_distance = new_person
-
-            # min_personが前回のidと同じであれば、それに対して追従する。異なればそれに追従する
             if best_person and highest_score > 0:
                 target_person = best_person
                 print(f"Following the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}", flush=True)
 
                 self.follow_target_person_pub.publish(target_person)
                 self.prev_person_id = target_person.id
-
-            # if is_person:
-                # target_person = Person()
-                # if is_same_id_flag == False:
-                #     target_person = min_person_by_distance
-                #     print(f"By distance, follow_target person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y} , prev_person_id = {self.prev_person_id}", flush=True)
-                # elif is_same_id_flag == True:
-                #     target_person = min_person_by_id
-                #     print(f"By id, follow_target person id: {target_person.id} , pos: {target_person.pose.position.x},  pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}", flush=True)
 
                 # publish rviz markers
                 ns = "follow_target_person_marker"
