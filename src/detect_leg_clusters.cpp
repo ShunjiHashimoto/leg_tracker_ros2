@@ -148,6 +148,7 @@ private:
       transform_available = tf_buffer_->canTransform(fixed_frame_, scan->header.frame_id, tf_time);
    }
    // レーザースキャナーまでの相対距離に従って処理された脚を保存する
+   // 比較関数を用いて、leg_setに変数が追加されるたびにsortが実行される。LiDARとの距離が近い順にsortされる。   
    std::set <leg_tracker_ros2::msg::Leg, CompareLegs> leg_set;
    if (!transform_available) {
       RCLCPP_INFO(this->get_logger(), "Not publishing detected leg clusters because no tf was available");
