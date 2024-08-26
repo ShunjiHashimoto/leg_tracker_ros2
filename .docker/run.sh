@@ -8,6 +8,7 @@ docker run --rm -it \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
     -v ~/.Xauthority:/root/.Xauthority:ro \
     --volume="${HOME}/ros2_ws:/root/ros2_ws" \
+    --volume /dev/shm:/dev/shm \
     --name=$CONTAINER_NAME \
     --privileged \
     --net=host \
