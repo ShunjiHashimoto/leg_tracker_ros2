@@ -540,7 +540,7 @@ class KalmanMultiTrackerNode(Node):
         id_weight = 0.5
         distance_weight = 1.0
         speed_weight = 2.0
-        static_penalty = -0.7 # 静的オブジェクトに対するペナルティ
+        static_penalty = -0.5 # 静的オブジェクトに対するペナルティ
         single_leg_penalty = -0.5  # 片足のみしか検出しない場合は-0.5 のペナルティを追加
 
         marker_id = 0
@@ -614,12 +614,13 @@ class KalmanMultiTrackerNode(Node):
                         # 速度に基づくスコア加算
                         score += speed * speed_weight
                         print(f"speed score: {speed * speed_weight}", flush=True)
+                        print(f"finally score: {score}", flush=True)
 
                         # 最高スコアの人物を選択
                         if score > highest_score:
                             highest_score = score
                             best_person = new_person
-
+            
             if best_person and highest_score > 0:
                 target_person = best_person
                 print(f"Following the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}", flush=True)
