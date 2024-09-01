@@ -63,3 +63,6 @@ WORKDIR /root/ros2_ws/src
 
 RUN echo 'source ~/ros2_ws/before_bringup.sh' >> ~/.bashrc
 RUN echo 'alias cm="cd ~/ros2_ws && colcon build --symlink-install --packages-select leg_tracker_ros2"' >> ~/.bashrc
+RUN echo 'alias start="ros2 launch leg_tracker_ros2 leg_tracker.launch.py"' >> ~/.bashrc
+RUN echo 'alias tang="ros2 run tang_control tang_control"' >> ~/.bashrc
+RUN echo 'alias leg="cd ~/ros2_ws/src/leg_tracker_ros2"' >> ~/.bashrc
