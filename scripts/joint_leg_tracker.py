@@ -17,16 +17,19 @@ import timeit
 import message_filters
 
 from leg_tracker_ros2.msg import Leg, LegArray, Person, PersonArray
+from config import LegTrackerParam
 
 import sys
 import signal
 import numpy as np
 import random
 import math 
+import json
 from scipy.optimize import linear_sum_assignment
 import scipy.stats
 import scipy.spatial
 from pykalman import KalmanFilter
+from logging import getLogger, config
 
 # コンストラクタ
 class DetectedCluster:
@@ -53,7 +56,6 @@ class ObjectTracked:
         self.is_person = is_person
         self.deleted = False
         self.in_free_space = in_free_space
-        self.obstacle_speed_threshold = 0.25
         self.vel_history = []  # 速度の履歴を保存するリスト
         self.is_static = False  # 静的かどうかのフラグ
         self.is_single_leg = False  # 片足のみのトラックかどうかのフラグ 追加
@@ -134,12 +136,12 @@ class ObjectTracked:
         current_speed = math.sqrt(self.vel_x**2 + self.vel_y**2)
         self.vel_history.append(current_speed)
         # 速度の履歴が一定数を超えたら、最も古いデータを削除
-        if len(self.vel_history) > 50:  # 例: 直近5回分の速度を保存
+        if len(self.vel_history) > LegTrackerParam.vel_history_size: 
             self.vel_history.pop(0)
         # 速度の平均値を計算
         avg_speed = sum(self.vel_history) / len(self.vel_history)
         # 平均速度が閾値以下であれば静的障害物と判定
-        self.is_static = avg_speed < self.obstacle_speed_threshold
+        self.is_static = avg_speed < LegTrackerParam.obstacle_speed_threshold
         if not self.is_static:
             print(f"Object {self.id_num} is considered static based on average speed {avg_speed}")
 
@@ -161,6 +163,11 @@ class KalmanMultiTrackerNode(Node):
         self.new_local_map_received = True
         self.prev_person_id = None
         random.seed(1) 
+        with open('/root/ros3_ws/src/leg_tracker_ros2/json/log_config.json', 'r') as f:
+            log_conf = json.load(f)
+        config.dictConfig(log_conf)
+        self.logger = getLogger(__name__)
+        self.logger.info('このメッセージはコンソールに表示され、ログファイルに保存されます。')
 
         # ROSパラメータ
         self.fixed_frame = self.get_parameter_or("fixed_frame","laser")
@@ -536,13 +543,6 @@ class KalmanMultiTrackerNode(Node):
             tf_time = self.get_clock().now()
             transform_available = self.buffer.can_transform(self.fixed_frame, self.publish_people_frame, tf_time)
 
-        # 重みの定義
-        id_weight = 0.5
-        distance_weight = 1.0
-        speed_weight = 2.0
-        static_penalty = -0.5 # 静的オブジェクトに対するペナルティ
-        single_leg_penalty = -0.5  # 片足のみしか検出しない場合は-0.5 のペナルティを追加
-
         marker_id = 0
         highest_score = -float('inf')
         best_person = None
@@ -588,33 +588,35 @@ class KalmanMultiTrackerNode(Node):
                         speed = math.sqrt(person.vel_x ** 2 + person.vel_y ** 2)
 
                         # スコアの初期値は信頼度に基づく
-                        score = person.confidence * id_weight
-                        print(f"first score: {score}", flush=True)
+                        score = person.confidence
+                        self.logger.debug(f"first score: {score}")
                         
                         # 片足しか検出されない場合はべナルティ
                         if person.is_single_leg:
-                            score += single_leg_penalty
-                            print(f"single leg penalty applied: {single_leg_penalty}", flush=True)
+                            score += LegTrackerParam.single_leg_penalty
+                            self.logger.debug(f"single leg penalty applied: {score}")
                         
                         # 静的である場合はペナルティ
                         if  person.is_static:
-                            score += static_penalty 
-                            print(f"is static score  {score}", flush=True)
+                            score += LegTrackerParam.static_penalty 
+                            self.logger.debug(f"is static score  {score}")
                         
                         # 同じIDの場合、大きくスコアを加算する
                         if self.prev_person_id == new_person.id:
-                            score += id_weight
-                            print(f"same id score  {score}" ,flush=True)
+                            score += LegTrackerParam.id_weight
+                            self.logger.debug(f"same id score  {score}")
+                        else:
+                            self.logger.debug(f"change id")
 
                         # 距離に基づくペナルティ
                         distance = math.sqrt(math.pow(ps.point.x, 2) + math.pow(ps.point.y, 2))
-                        score -= distance * distance_weight
-                        print(f"distance score: {distance * distance_weight}", flush=True)
+                        score -= distance * LegTrackerParam.distance_weight
+                        self.logger.debug(f"distance score: {score}")
                         
                         # 速度に基づくスコア加算
-                        score += speed * speed_weight
-                        print(f"speed score: {speed * speed_weight}", flush=True)
-                        print(f"finally score: {score}", flush=True)
+                        score += speed * LegTrackerParam.speed_weight
+                        self.logger.debug(f"speed score: {score}")
+                        self.logger.debug(f"\033[91mfinally score: {score}\033[0m")
 
                         # 最高スコアの人物を選択
                         if score > highest_score:
@@ -623,7 +625,7 @@ class KalmanMultiTrackerNode(Node):
             
             if best_person and highest_score > 0:
                 target_person = best_person
-                print(f"Following the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}", flush=True)
+                self.logger.info(f"\033[94mFollowing the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}\033[0m")
 
                 self.follow_target_person_pub.publish(target_person)
                 self.prev_person_id = target_person.id
