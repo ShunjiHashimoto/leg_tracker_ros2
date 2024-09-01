@@ -9,6 +9,7 @@ docker run --rm -it \
     -v ~/.Xauthority:/root/.Xauthority:ro \
     --volume="${HOME}/ros2_ws:/root/ros2_ws" \
     --name=$CONTAINER_NAME \
+    -e TZ=Asia/Tokyo \
     --privileged \
     --net=host \
     $DOCKER_IMAGE \
