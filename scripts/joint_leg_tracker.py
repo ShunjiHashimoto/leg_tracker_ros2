@@ -163,11 +163,14 @@ class KalmanMultiTrackerNode(Node):
         self.new_local_map_received = True
         self.prev_person_id = None
         random.seed(1) 
-        with open('/root/ros3_ws/src/leg_tracker_ros2/json/log_config.json', 'r') as f:
+        with open('/root/ros2_ws/src/leg_tracker_ros2/json/log_config.json', 'r') as f:
             log_conf = json.load(f)
-        config.dictConfig(log_conf)
         self.logger = getLogger(__name__)
-        self.logger.info('このメッセージはコンソールに表示され、ログファイルに保存されます。')
+        if LegTrackerParam.debug:
+            log_conf["handlers"]["fileHandler"]["level"] = "DEBUG"
+            log_conf["handlers"]["consoleHandler"]["level"] = "DEBUG"
+        config.dictConfig(log_conf)
+        self.logger.info('joint leg tracker node start')
 
         # ROSパラメータ
         self.fixed_frame = self.get_parameter_or("fixed_frame","laser")
@@ -294,7 +297,7 @@ class KalmanMultiTrackerNode(Node):
                 new_detected_cluster.in_free_space_bool = False
             detected_clusters.append(new_detected_cluster)
             detected_clusters_set.add(new_detected_cluster)
-        if self.debug: print(f"leg cluster size: {len(detected_clusters_msg.legs)}")
+        # if self.debug: print(f"leg cluster size: {len(detected_clusters_msg.legs)}")
         to_duplicate = set()
         # propogated: 伝搬された
         propogated = copy.deepcopy(self.objects_tracked)
@@ -562,7 +565,7 @@ class KalmanMultiTrackerNode(Node):
                         ps.header.stamp = tf_time.to_msg()
                         ps.point.x = person.pos_x
                         ps.point.y = person.pos_y
-                        if self.debug: print(f"pos_x: {ps.point.x}, pos_y: {ps.point.y} , person_id = {self.prev_person_id}", flush=True)
+                        # if self.debug: print(f"pos_x: {ps.point.x}, pos_y: {ps.point.y} , person_id = {self.prev_person_id}", flush=True)
                         try:
                             ps = self.buffer.transform(ps, self.publish_people_frame)
                         except:
