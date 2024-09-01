@@ -1,3 +1,4 @@
 *.pyc
 rosbag/*
 .vscode
+*.log
