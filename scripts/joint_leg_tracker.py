@@ -173,20 +173,30 @@ class KalmanMultiTrackerNode(Node):
         self.logger.info('joint leg tracker node start')
 
         # ROSパラメータ
-        self.fixed_frame = self.get_parameter_or("fixed_frame","laser")
-        self.max_leg_pairing_dist = self.get_parameter_or("max_leg_pairing_dist", 0.8)
-        self.confidence_threshold_to_maintain_track = self.get_parameter_or("confidence_threshold_to_maintain_track", 0.1)
+        self.declare_parameter("scan_topic", "/scan")
+        self.declare_parameter("fixed_frame", "laser")
+        self.declare_parameter("scan_frequency", 7.5)
+        self.declare_parameter("max_leg_pairing_dist", 0.8)
+        self.declare_parameter("dist_travelled_together_to_initiate_leg_pair", 0.5)
+        self.declare_parameter("debug", False)
+        self.declare_parameter("confidence_percentile", 0.9)
+        self.declare_parameter("confidence_threshold_to_maintain_track", 0.1)
+        self.declare_parameter("max_std", 0.9)
+        self.scan_topic = self.get_parameter("scan_topic").value
+        self.fixed_frame = self.get_parameter("fixed_frame").value
+        self.scan_frequency = self.get_parameter("scan_frequency").value
+        self.max_leg_pairing_dist = self.get_parameter("max_leg_pairing_dist").value
+        self.dist_travelled_together_to_initiate_leg_pair = self.get_parameter("dist_travelled_together_to_initiate_leg_pair").value
+        self.debug = self.get_parameter("debug").value
+        self.confidence_percentile = self.get_parameter("confidence_percentile").value
+        self.confidence_threshold_to_maintain_track = self.get_parameter("confidence_threshold_to_maintain_track").value
+        self.max_std = self.get_parameter("max_std").value
+
         self.publish_occluded = self.get_parameter_or("publish_occluded", True)
         self.publish_people_frame = self.get_parameter_or("publish_people_frame", self.fixed_frame)
         self.use_scan_header_stamp_for_tfs = self.get_parameter_or("use_scan_header_stamp_for_tfs", False)
         self.publish_detected_people = self.get_parameter_or("display_detected_people", False)
-        self.dist_travelled_together_to_initiate_leg_pair = self.get_parameter_or("dist_travelled_together_to_initiate_leg_pair", 0.5)
-        scan_topic = self.get_parameter_or("scan_topic", "/scan")
-        self.scan_frequency = self.get_parameter_or("scan_frequency", 7.5)
         self.in_free_space_threshold = self.get_parameter_or("in_free_space_threshold", 0.06)
-        self.confidence_percentile = self.get_parameter_or("confidence_percentile", 0.90)
-        self.max_std = self.get_parameter_or("max_std", 0.9)
-        self.debug = self.get_parameter_or("debug", False)
 
         self.mahalanobis_dist_gate = scipy.stats.norm.ppf (1.0 - (1.0-self.confidence_percentile)/2., 0, 1.0)
         self.max_cov = self.max_std**2
@@ -439,6 +449,7 @@ class KalmanMultiTrackerNode(Node):
                 dist_travelled = min(track_1.dist_travelled - track_1_initial_dist, track_2.dist_travelled - track_2_initial_dist)
                 # 2つのトラックでペアが形成されてからの移動距離がしきい値以上であれば人の足としてみなす
                 # free-spaceにあれば人の足としてみなす
+                print(f"travel: {self.dist_travelled_together_to_initiate_leg_pair}")
                 if (dist_travelled > self.dist_travelled_together_to_initiate_leg_pair 
                     and (track_1.in_free_space < self.in_free_space_threshold or track_2.in_free_space < self.in_free_space_threshold)
                     ):

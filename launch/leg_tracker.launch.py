@@ -47,6 +47,8 @@ def generate_launch_description():
                 {'max_detected_clusters': 10},
                 {'publish_occluded': True},
                 {'debug': False},
+                {'cluster_dist_euclid': 0.13},
+                {'max_detect_distance': 2.5}
             ]
     )
 
@@ -59,14 +61,13 @@ def generate_launch_description():
         parameters=[
             {'scan_topic' : "/scan"},
             {'fixed_frame' : "laser"},
-            {'scan_frequency' : 40},
-            {'detection_threshold': 0.2},
-            {"min_points_per_cluster" : 10},
-            {"max_points_per_cluster": 100}, 
-            {'max_detect_distance': 2.5},
-            {'max_detected_clusters': 10},
+            {'scan_frequency' : 40.0},
+            {'max_leg_pairing_dist': 0.8},
             {'dist_travelled_together_to_initiate_leg_pair': 0.5},
             {'debug': False},
+            {'confidence_percentile': 0.9},
+            {'confidence_threshold_to_maintain_track': 0.1},
+            {'max_std': 0.9},
         ]
     )
 
@@ -93,21 +94,23 @@ def generate_launch_description():
             {"base_frame": "imu_link"},
             {'local_map_resolution':0.1},
             {'local_map_cells_per_side':100},
-            {'min_points_per_cluster': 3}, # クラスタとしてみなす最小点数
+            {"min_points_per_cluster" : 10},
+            {"max_points_per_cluster": 100}, 
             {'invalid_measurements_are_free_space': True}, # センサが誤動作したときに自由空間としてみなすか否か
             {'shift_threshold': 1.0}, # マップをシフトさせるしきい値、1m以上動けばマップがシフトする。値を大きくすればシフトしづらく、静的障害物は静的障害物としてみなされやすい
+            {'cluster_dist_euclid': 0.08},
         ]    
     )
 
     # Include URG Node2 Launch File
-    pkg_prefix = get_package_share_directory('urg_node2')
-    launch_path = join(pkg_prefix, 'launch/urg_node2.launch.py')
-    urg_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
+    # pkg_prefix = get_package_share_directory('urg_node2')
+    # launch_path = join(pkg_prefix, 'launch/urg_node2.launch.py')
+    # urg_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
 
     # Include URG Node2 Launch File
-    pkg_prefix = get_package_share_directory('ros2_razor_imu')
-    launch_path = join(pkg_prefix, 'launch/razor_pub.launch.py')
-    imu_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
+    # pkg_prefix = get_package_share_directory('ros2_razor_imu')
+    # launch_path = join(pkg_prefix, 'launch/razor_pub.launch.py')
+    # imu_node = IncludeLaunchDescription(PythonLaunchDescriptionSource(launch_path))
     
     main_nodes.add_action(detect_leg_clusters_node)
     main_nodes.add_action(joint_leg_tracker_node)
@@ -115,13 +118,13 @@ def generate_launch_description():
     # main_nodes.add_action(inflated_human_scan_node)
     
     delayed_nodes = TimerAction(
-        period=5.0,
+        period=1.0,
         actions=[main_nodes]
     )
 
     ld = LaunchDescription()
-    ld.add_action(urg_node)
-    ld.add_action(imu_node)
+    # ld.add_action(urg_node)
+    # ld.add_action(imu_node)
     ld.add_action(delayed_nodes)
 
     return ld 

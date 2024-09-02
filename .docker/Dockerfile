@@ -1,5 +1,5 @@
-FROM arm64v8/ros:humble-perception
-#FROM osrf/ros:humble-desktop-full
+# FROM arm64v8/ros:humble-perception
+FROM osrf/ros:humble-desktop-full
 
 # キーボード設定の選択を省略
 ARG DEBIAN_FRONTEND=noninteractive
@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y \
 ENV RMW_IMPLEMENTATION rmw_cyclonedds_cpp
 
 # Install pip packages
+# pip install numpy==1.24.4
 RUN pip install --no-cache-dir \
   pyserial==3.5 \
   pykalman==0.9.7 \
