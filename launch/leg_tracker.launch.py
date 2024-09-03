@@ -63,7 +63,7 @@ def generate_launch_description():
             {'fixed_frame' : "laser"},
             {'scan_frequency' : 40.0},
             {'max_leg_pairing_dist': 0.8},
-            {'dist_travelled_together_to_initiate_leg_pair': 0.5},
+            {'dist_travelled_together_to_initiate_leg_pair': 0.3},
             {'debug': False},
             {'confidence_percentile': 0.9},
             {'confidence_threshold_to_maintain_track': 0.1},
