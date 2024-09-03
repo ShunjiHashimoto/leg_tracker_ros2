@@ -143,7 +143,7 @@ class ObjectTracked:
         # 平均速度が閾値以下であれば静的障害物と判定
         self.is_static = avg_speed < LegTrackerParam.obstacle_speed_threshold
         if not self.is_static:
-            print(f"Object {self.id_num} is considered static based on average speed {avg_speed}")
+            print(f"Object {self.id_num} is considered moving based on average speed {avg_speed}")
 
 class KalmanMultiTrackerNode(Node):    
     max_cost = 9999999
@@ -182,6 +182,7 @@ class KalmanMultiTrackerNode(Node):
         self.declare_parameter("confidence_percentile", 0.9)
         self.declare_parameter("confidence_threshold_to_maintain_track", 0.1)
         self.declare_parameter("max_std", 0.9)
+        self.declare_parameter("in_free_space_threshold", 0.06)
         self.scan_topic = self.get_parameter("scan_topic").value
         self.fixed_frame = self.get_parameter("fixed_frame").value
         self.scan_frequency = self.get_parameter("scan_frequency").value
@@ -196,7 +197,7 @@ class KalmanMultiTrackerNode(Node):
         self.publish_people_frame = self.get_parameter_or("publish_people_frame", self.fixed_frame)
         self.use_scan_header_stamp_for_tfs = self.get_parameter_or("use_scan_header_stamp_for_tfs", False)
         self.publish_detected_people = self.get_parameter_or("display_detected_people", False)
-        self.in_free_space_threshold = self.get_parameter_or("in_free_space_threshold", 0.06)
+        self.in_free_space_threshold = self.get_parameter_or("in_free_space_threshold", 0.06).value
 
         self.mahalanobis_dist_gate = scipy.stats.norm.ppf (1.0 - (1.0-self.confidence_percentile)/2., 0, 1.0)
         self.max_cov = self.max_std**2
@@ -222,7 +223,7 @@ class KalmanMultiTrackerNode(Node):
     def how_much_in_free_space(self, x, y):
         # ローカルマップがなければ、free-spaceがないとする 
         if self.local_map == None:
-            return self.in_free_space_threshold*2
+            return self.in_free_space_threshold*2.0
         # ローカルマップ座標のx,y座標を取得する
         map_x = int(round((x - self.local_map.info.origin.position.x)/self.local_map.info.resolution))
         map_y = int(round((y - self.local_map.info.origin.position.y)/self.local_map.info.resolution))
@@ -251,7 +252,8 @@ class KalmanMultiTrackerNode(Node):
             for track in objects_tracked:
                 # 人と、非自由空間における障害物がマッチングすることを防ぐ
                 if track.is_person and not detect.in_free_space_bool:
-                    cost = self.max_cost 
+                    print(f"cost is max: {track.id_num}")
+                    cost = self.max_cost
                 else:
                     # マッチングのためにマハラノビス距離を使う
                     cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
@@ -307,7 +309,6 @@ class KalmanMultiTrackerNode(Node):
                 new_detected_cluster.in_free_space_bool = False
             detected_clusters.append(new_detected_cluster)
             detected_clusters_set.add(new_detected_cluster)
-        # if self.debug: print(f"leg cluster size: {len(detected_clusters_msg.legs)}")
         to_duplicate = set()
         # propogated: 伝搬された
         propogated = copy.deepcopy(self.objects_tracked)
@@ -345,6 +346,7 @@ class KalmanMultiTrackerNode(Node):
         # 観測結果をもとにすべてのトラッキングされた情報を更新する
         tracks_to_delete = set()
         for idx, track in enumerate(self.objects_tracked):
+            print(f"track person idx{idx}, person{track.is_person}, idnum{track.id_num}")
             # propogated: object_tracked, detected_clusters: object_detected
             propogated_track = propogated[idx] # Get the corresponding propogated track
             if propogated_track.is_person:
@@ -395,7 +397,7 @@ class KalmanMultiTrackerNode(Node):
             # 追跡対象の信頼度が低ければtrackから削除する、信頼度は対象が自由空間にあれば高くなり、また検出結果とマッチしていたかによって左右される
             if  track.is_person and track.confidence < self.confidence_threshold_to_maintain_track:
                 tracks_to_delete.add(track)
-                # rospy.loginfo("deleting due to low confidence")
+                self.logger.info("deleting due to low confidence")
             else:
                 # 共分散行列が大きくなりすぎていれば削除する
                 cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
@@ -449,7 +451,6 @@ class KalmanMultiTrackerNode(Node):
                 dist_travelled = min(track_1.dist_travelled - track_1_initial_dist, track_2.dist_travelled - track_2_initial_dist)
                 # 2つのトラックでペアが形成されてからの移動距離がしきい値以上であれば人の足としてみなす
                 # free-spaceにあれば人の足としてみなす
-                print(f"travel: {self.dist_travelled_together_to_initiate_leg_pair}")
                 if (dist_travelled > self.dist_travelled_together_to_initiate_leg_pair 
                     and (track_1.in_free_space < self.in_free_space_threshold or track_2.in_free_space < self.in_free_space_threshold)
                     ):
@@ -576,7 +577,6 @@ class KalmanMultiTrackerNode(Node):
                         ps.header.stamp = tf_time.to_msg()
                         ps.point.x = person.pos_x
                         ps.point.y = person.pos_y
-                        # if self.debug: print(f"pos_x: {ps.point.x}, pos_y: {ps.point.y} , person_id = {self.prev_person_id}", flush=True)
                         try:
                             ps = self.buffer.transform(ps, self.publish_people_frame)
                         except:
@@ -637,7 +637,7 @@ class KalmanMultiTrackerNode(Node):
                             highest_score = score
                             best_person = new_person
             
-            if best_person and highest_score > 0:
+            if best_person:
                 target_person = best_person
                 self.logger.info(f"\033[94mFollowing the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}\033[0m")
 

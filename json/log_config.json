@@ -18,7 +18,8 @@
             "class": "logging.FileHandler",
             "level": "INFO",
             "formatter": "simple",
-            "filename": "joint_leg_tracker.log"
+            "filename": "/root/ros2_ws/log/joint_leg_tracker.log",
+            "mode": "w"
         }
     },
 
