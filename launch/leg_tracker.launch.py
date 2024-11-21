@@ -63,7 +63,7 @@ def generate_launch_description():
             {'fixed_frame' : "laser"},
             {'scan_frequency' : 40.0},
             {'max_leg_pairing_dist': 0.8},
-            {'dist_travelled_together_to_initiate_leg_pair': 0.3},
+            {'dist_travelled_together_to_initiate_leg_pair': 0.75}, #0.3
             {'debug': False},
             {'confidence_percentile': 0.9},
             {'confidence_threshold_to_maintain_track': 0.1},
@@ -119,7 +119,7 @@ def generate_launch_description():
     # main_nodes.add_action(inflated_human_scan_node)
     
     delayed_nodes = TimerAction(
-        period=1.0,
+        period=4.0,
         actions=[main_nodes]
     )
 

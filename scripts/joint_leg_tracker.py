@@ -639,7 +639,7 @@ class KalmanMultiTrackerNode(Node):
                             highest_score = score
                             best_person = new_person
             
-            # if best_person:
+            if best_person:
                         target_person = new_person
                         self.logger.debug(f"\033[94mFollowing the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}\033[0m")
 
