@@ -1,5 +1,5 @@
-# FROM arm64v8/ros:humble-perception
-FROM osrf/ros:humble-desktop-full
+FROM arm64v8/ros:humble-perception
+# FROM osrf/ros:humble-desktop-full
 
 # キーボード設定の選択を省略
 ARG DEBIAN_FRONTEND=noninteractive
