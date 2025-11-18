@@ -1,13 +1,15 @@
 #!/bin/bash
 
-DOCKER_IMAGE="leg_tracker:latest"
-CONTAINER_NAME="leg_tracker_ros2"
+DOCKER_IMAGE="leg_tracker_ros2:latest"
+CONTAINER_NAME="leg_tracker"
 
 docker run --rm -it \
-    --env="DISPLAY=$DISPLAY" \
+    --env DISPLAY=localhost:11.0 \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
-    --volume="/home/hashimoto/ros2_ws:/root/ros2_ws" \
+    -v ~/.Xauthority:/root/.Xauthority:ro \
+    --volume="${HOME}/ros2_ws:/root/ros2_ws" \
     --name=$CONTAINER_NAME \
+    -e TZ=Asia/Tokyo \
     --privileged \
     --net=host \
     $DOCKER_IMAGE \

@@ -1,0 +1,57 @@
+rosbag2_bagfile_information:
+  compression_format: ''
+  compression_mode: ''
+  custom_data: {}
+  duration:
+    nanoseconds: 89669753221
+  files:
+  - duration:
+      nanoseconds: 89669753221
+    message_count: 27828
+    path: demo_stationary_cluttered_environment.db3
+    starting_time:
+      nanoseconds_since_epoch: 1394221398935298486
+  message_count: 27828
+  relative_file_paths:
+  - demo_stationary_cluttered_environment.db3
+  ros_distro: rosbags
+  starting_time:
+    nanoseconds_since_epoch: 1394221398935298486
+  storage_identifier: sqlite3
+  topics_with_message_count:
+  - message_count: 17500
+    topic_metadata:
+      name: /tf
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: tf/msg/tfMessage
+      type_description_hash: RIHS01_30520e9eeb21211b05edc25800a946d307e39036a049e1e95785c9652cdc2f20
+  - message_count: 8968
+    topic_metadata:
+      name: /odom
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: nav_msgs/msg/Odometry
+      type_description_hash: RIHS01_3cc97dc7fb7502f8714462c526d369e35b603cfc34d946e3f2eda2766dfec6e0
+  - message_count: 15
+    topic_metadata:
+      name: /map
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: nav_msgs/msg/OccupancyGrid
+      type_description_hash: RIHS01_8d348150c12913a31ee0ec170fbf25089e4745d17035792a1ba94d6f0bc0cfc7
+  - message_count: 673
+    topic_metadata:
+      name: /left_scan
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/LaserScan
+      type_description_hash: RIHS01_64c191398013af96509d518dac71d5164f9382553fce5c1f8cca5be7924bd828
+  - message_count: 672
+    topic_metadata:
+      name: /right_scan
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/LaserScan
+      type_description_hash: RIHS01_64c191398013af96509d518dac71d5164f9382553fce5c1f8cca5be7924bd828
+  version: 8

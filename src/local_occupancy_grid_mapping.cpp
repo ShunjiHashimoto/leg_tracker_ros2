@@ -39,14 +39,15 @@ public:
         base_frame_ = this->declare_parameter<std::string>("base_frame", "base_link");
         auto local_map_topic = this->declare_parameter<std::string>("local_map_topic", "local_map");
         resolution_ = this->declare_parameter<double>("local_map_resolution", 0.05);
-        invalid_measurements_are_free_space_ = this->declare_parameter<bool>("invalid_measurements_are_free_space", false);
-        reliable_inf_range_ = this->declare_parameter<double>("reliable_inf_range", 5.0);
-        unseen_is_freespace_ = this->declare_parameter<bool>("unseen_is_freespace", true);
+        invalid_measurements_are_free_space_ = this->declare_parameter<bool>("invalid_measurements_are_free_space", false); 
+        reliable_inf_range_ = this->declare_parameter<double>("reliable_inf_range", 5.0); // 5m以上なにもなくてもデータを信頼する
+        unseen_is_freespace_ = this->declare_parameter<bool>("unseen_is_freespace", true); // マップをシフトさせたことによって生じる空白空間を自由空間とみなすか否か
         use_scan_header_stamp_for_tfs_ = this->declare_parameter<bool>("use_scan_header_stamp_for_tfs", false);
-        shift_threshold_ = this->declare_parameter<double>("shift_threshold", 1.0);
+        shift_threshold_ = this->declare_parameter<double>("shift_threshold", 1.0); 
         width_ = this->declare_parameter<int>("local_map_cells_per_side", 400);
-        cluster_dist_euclid_ = this->declare_parameter<double>("cluster_dist_euclid",  0.13);
-        min_points_per_cluster_ = this->declare_parameter<int>("min_points_per_cluster",  3);
+        cluster_dist_euclid_ = this->declare_parameter<double>("cluster_dist_euclid",  0.13); // クラスタとしてみなす最小距離位、13cm以内であれば同じクラスタ
+        min_points_per_cluster_ = this->declare_parameter<int>("min_points_per_cluster",  3); 
+        max_points_per_cluster_ = this->declare_parameter<int>("max_points_per_cluster",  100); 
 
         // 占有格子マップの初期化処理
         l0_ = logit(UNKNOWN);
@@ -109,6 +110,7 @@ private:
 
     double cluster_dist_euclid_;
     int min_points_per_cluster_;
+    int max_points_per_cluster_;
  
     void laserAndLegCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& scan_msg, const leg_tracker_ros2::msg::LegArray::ConstSharedPtr& non_leg_clusters) {
         bool transform_available;
@@ -133,7 +135,7 @@ private:
         }
 
         if (transform_available) {
-            RCLCPP_INFO(this->get_logger(), "Transform Available");
+            // RCLCPP_INFO(this->get_logger(), "Transform Available");
             std::vector<geometry_msgs::msg::Point> non_legs;
             for(long unsigned int i = 0; i < non_leg_clusters->legs.size(); i++){
                 leg_tracker_ros2::msg::Leg leg = non_leg_clusters->legs[i];
@@ -159,12 +161,13 @@ private:
             sensor_msgs::msg::LaserScan scan = *scan_msg;
             laser_processor::ScanProcessor processor(scan);
             processor.splitConnected(cluster_dist_euclid_);
-            processor.removeLessThan(min_points_per_cluster_);
+            processor.removeLessThan(min_points_per_cluster_, max_points_per_cluster_);
             for (std::list<laser_processor::SampleSet*>::iterator c_iter = processor.getClusters().begin(); c_iter != processor.getClusters().end(); ++c_iter) {
                 bool is_cluster_human = true;
                 tf2::Vector3 c_pos = (*c_iter)->getPosition();
                 // Check every point in the <non_legs> message to see
                 // if the scan cluster is within an epsilon distance of the cluster
+                // 人の足ではないクラスタに近いクラスタは人の足ではないとする
                 for (std::vector<geometry_msgs::msg::Point>::iterator non_leg = non_legs.begin(); non_leg != non_legs.end(); ++non_leg) {
                     double dist = sqrt(pow((c_pos.x() - (*non_leg).x), 2) + pow((c_pos.y() - (*non_leg).y), 2));
                     if (dist < 0.1) {

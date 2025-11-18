@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rcl_interfaces.msg import SetParametersResult
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker,  MarkerArray
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import PointStamped, Point, Quaternion
@@ -17,16 +17,19 @@ import timeit
 import message_filters
 
 from leg_tracker_ros2.msg import Leg, LegArray, Person, PersonArray
+from config import LegTrackerParam
 
 import sys
 import signal
 import numpy as np
 import random
 import math 
+import json
 from scipy.optimize import linear_sum_assignment
 import scipy.stats
 import scipy.spatial
 from pykalman import KalmanFilter
+from logging import getLogger, config
 
 # コンストラクタ
 class DetectedCluster:
@@ -44,7 +47,7 @@ class ObjectTracked:
     def __init__(self, x, y, now, confidence, is_person, in_free_space):        
         self.id_num = ObjectTracked.new_leg_id_num
         ObjectTracked.new_leg_id_num += 1
-        self.colour = (random.random(), random.random(), random.random())
+        self.color = (random.random(), random.random(), random.random())
         self.last_seen = now # ROSのタイムスタンプ
         self.seen_in_current_scan = True
         self.times_seen = 1
@@ -53,17 +56,23 @@ class ObjectTracked:
         self.is_person = is_person
         self.deleted = False
         self.in_free_space = in_free_space
+        self.vel_history = []  # 速度の履歴を保存するリスト
+        self.is_static = False  # 静的かどうかのフラグ
+        self.is_single_leg = False  # 片足のみのトラックかどうかのフラグ 追加
+        self.avg_speed = 0.0
 
         # 定常速度モデルのカルマンフィルタを使って人を追跡する  
         # LiDARデータの値は正確であるため観測値をより信頼するように式を立てる  
         # TODO: 使用するLiDARによってパラメータ変更が必要
-        scan_frequency = 7.5 
+        scan_frequency = 40
+        # scan_frequency = 7.5 
         delta_t = 1./scan_frequency
         if scan_frequency > 7.49 and scan_frequency < 7.51:
             std_process_noise = 0.06666
         elif scan_frequency > 9.99 and scan_frequency < 10.01:
             std_process_noise = 0.05
-        elif scan_frequency > 14.99 and scan_frequency < 15.01:
+        # elif scan_frequency > 14.99 and scan_frequency < 15.01:
+        elif scan_frequency > 14.99:
             std_process_noise = 0.03333
         else:
             print ("Scan frequency needs to be either 7.5, 10 or 15 or the standard deviation of the process noise needs to be tuned to your scanner frequency")
@@ -123,7 +132,19 @@ class ObjectTracked:
         self.pos_y = self.filtered_state_means[1]
         self.vel_x = self.filtered_state_means[2]
         self.vel_y = self.filtered_state_means[3]
-
+        
+        # 静的障害物の判定
+        current_speed = math.sqrt(self.vel_x**2 + self.vel_y**2)
+        self.vel_history.append(current_speed)
+        # 速度の履歴が一定数を超えたら、最も古いデータを削除
+        if len(self.vel_history) > LegTrackerParam.vel_history_size: 
+            self.vel_history.pop(0)
+        # 速度の平均値を計算
+        self.avg_speed = sum(self.vel_history) / len(self.vel_history)
+        # 平均速度が閾値以下であれば静的障害物と判定
+        self.is_static = self.avg_speed < LegTrackerParam.obstacle_speed_threshold
+        #if not self.is_static:
+            #print(f"Object {self.id_num} is considered moving based on average speed {avg_speed}")
 
 class KalmanMultiTrackerNode(Node):    
     max_cost = 9999999
@@ -141,36 +162,57 @@ class KalmanMultiTrackerNode(Node):
         self.tfListener = tf2_ros.TransformListener(self.buffer, self)
         self.local_map = None
         self.new_local_map_received = True
+        self.prev_person_id = None
         random.seed(1) 
+        with open('/root/ros2_ws/src/leg_tracker_ros2/json/log_config.json', 'r') as f:
+            log_conf = json.load(f)
+        self.logger = getLogger(__name__)
+        if LegTrackerParam.debug:
+            log_conf["handlers"]["fileHandler"]["level"] = "DEBUG"
+            log_conf["handlers"]["consoleHandler"]["level"] = "DEBUG"
+        config.dictConfig(log_conf)
+        self.logger.debug('joint leg tracker node start')
 
         # ROSパラメータ
-        self.fixed_frame = self.get_parameter_or("fixed_frame","laser")
-        self.max_leg_pairing_dist = self.get_parameter_or("max_leg_pairing_dist", 0.8)
-        self.confidence_threshold_to_maintain_track = self.get_parameter_or("confidence_threshold_to_maintain_track", 0.1)
+        self.declare_parameter("scan_topic", "/scan")
+        self.declare_parameter("fixed_frame", "laser")
+        self.declare_parameter("scan_frequency", 7.5)
+        self.declare_parameter("max_leg_pairing_dist", 0.8)
+        self.declare_parameter("dist_travelled_together_to_initiate_leg_pair", 0.5)
+        self.declare_parameter("debug", False)
+        self.declare_parameter("confidence_percentile", 0.9)
+        self.declare_parameter("confidence_threshold_to_maintain_track", 0.1)
+        self.declare_parameter("max_std", 0.9)
+        self.declare_parameter("in_free_space_threshold", 0.06)
+        self.scan_topic = self.get_parameter("scan_topic").value
+        self.fixed_frame = self.get_parameter("fixed_frame").value
+        self.scan_frequency = self.get_parameter("scan_frequency").value
+        self.max_leg_pairing_dist = self.get_parameter("max_leg_pairing_dist").value
+        self.dist_travelled_together_to_initiate_leg_pair = self.get_parameter("dist_travelled_together_to_initiate_leg_pair").value
+        self.debug = self.get_parameter("debug").value
+        self.confidence_percentile = self.get_parameter("confidence_percentile").value
+        self.confidence_threshold_to_maintain_track = self.get_parameter("confidence_threshold_to_maintain_track").value
+        self.max_std = self.get_parameter("max_std").value
+
         self.publish_occluded = self.get_parameter_or("publish_occluded", True)
         self.publish_people_frame = self.get_parameter_or("publish_people_frame", self.fixed_frame)
         self.use_scan_header_stamp_for_tfs = self.get_parameter_or("use_scan_header_stamp_for_tfs", False)
         self.publish_detected_people = self.get_parameter_or("display_detected_people", False)
-        self.dist_travelled_together_to_initiate_leg_pair = self.get_parameter_or("dist_travelled_together_to_initiate_leg_pair", 0.5)
-        scan_topic = self.get_parameter_or("scan_topic", "/scan")
-        self.scan_frequency = self.get_parameter_or("scan_frequency", 7.5)
-        self.in_free_space_threshold = self.get_parameter_or("in_free_space_threshold", 0.06)
-        self.confidence_percentile = self.get_parameter_or("confidence_percentile", 0.90)
-        self.max_std = self.get_parameter_or("max_std", 0.9)
+        self.in_free_space_threshold = self.get_parameter_or("in_free_space_threshold", 0.06).value
 
         self.mahalanobis_dist_gate = scipy.stats.norm.ppf (1.0 - (1.0-self.confidence_percentile)/2., 0, 1.0)
         self.max_cov = self.max_std**2
         self.latest_scan_header_stamp_with_tf_available = self.get_clock().now()
 
         # ROS publishers
-        self.people_tracked_pub = self.create_publisher(PersonArray, "people_tracked", 300)
-        self.people_detected_pub = self.create_publisher(PersonArray, "people_detected", 300)
-        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 300)
-        self.non_leg_clusters_pub = self.create_publisher(LegArray, "non_leg_clusters", 300)
+        self.people_tracked_pub = self.create_publisher(PersonArray, "people_tracked", 10)
+        self.follow_target_person_pub = self.create_publisher(Person, "follow_target_person", 10)
+        self.marker_array_pub = self.create_publisher(MarkerArray, "visualization_marker_array", 10)
+        self.non_leg_clusters_pub = self.create_publisher(LegArray, "non_leg_clusters", 10)
 
         # ROS subscribers 
-        self.detected_clusters_sub = self.create_subscription(LegArray, "detected_leg_clusters", self.detected_clusters_callback, 300)
-        self.local_map_sub = self.create_subscription(OccupancyGrid, "local_map", self.local_map_callback, 300)
+        self.detected_clusters_sub = self.create_subscription(LegArray, "detected_leg_clusters", self.detected_clusters_callback, 10)
+        self.local_map_sub = self.create_subscription(OccupancyGrid, "local_map", self.local_map_callback, 10)
 
         rclpy.spin(self)
         
@@ -182,7 +224,7 @@ class KalmanMultiTrackerNode(Node):
     def how_much_in_free_space(self, x, y):
         # ローカルマップがなければ、free-spaceがないとする 
         if self.local_map == None:
-            return self.in_free_space_threshold*2
+            return self.in_free_space_threshold*2.0
         # ローカルマップ座標のx,y座標を取得する
         map_x = int(round((x - self.local_map.info.origin.position.x)/self.local_map.info.resolution))
         map_y = int(round((y - self.local_map.info.origin.position.y)/self.local_map.info.resolution))
@@ -211,7 +253,8 @@ class KalmanMultiTrackerNode(Node):
             for track in objects_tracked:
                 # 人と、非自由空間における障害物がマッチングすることを防ぐ
                 if track.is_person and not detect.in_free_space_bool:
-                    cost = self.max_cost 
+                    print(f"cost is max: {track.id_num}")
+                    cost = self.max_cost
                 else:
                     # マッチングのためにマハラノビス距離を使う
                     cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
@@ -247,7 +290,7 @@ class KalmanMultiTrackerNode(Node):
                 #insert sleep command
                 wait_iters += 1
             if wait_iters >= 10:
-                self.get_logger().info("no new local_map received. Continuing anyways")
+                self.get_logger().debug("no new local_map received. Continuing anyways")
             else:
                 self.new_local_map_received = False
         now = detected_clusters_msg.header.stamp
@@ -267,7 +310,6 @@ class KalmanMultiTrackerNode(Node):
                 new_detected_cluster.in_free_space_bool = False
             detected_clusters.append(new_detected_cluster)
             detected_clusters_set.add(new_detected_cluster)
-
         to_duplicate = set()
         # propogated: 伝搬された
         propogated = copy.deepcopy(self.objects_tracked)
@@ -305,21 +347,25 @@ class KalmanMultiTrackerNode(Node):
         # 観測結果をもとにすべてのトラッキングされた情報を更新する
         tracks_to_delete = set()
         for idx, track in enumerate(self.objects_tracked):
+            print(f"track person idx{idx}, person{track.is_person}, idnum{track.id_num}")
             # propogated: object_tracked, detected_clusters: object_detected
             propogated_track = propogated[idx] # Get the corresponding propogated track
             if propogated_track.is_person:
                 # matched_tracksの中に同じ2つの値に紐付けられた異なるobject_detectedの値が存在する。これらは右足、左足として認識され、その中心を追跡対象とする
                 if propogated_track in matched_tracks and duplicates[propogated_track] in matched_tracks:
+                    propogated_track.is_single_leg = False
                     md_1 = matched_tracks[propogated_track]
                     md_2 = matched_tracks[duplicates[propogated_track]]
                     matched_detection = DetectedCluster((md_1.pos_x+md_2.pos_x)/2., (md_1.pos_y+md_2.pos_y)/2., (md_1.confidence+md_2.confidence)/2., (md_1.in_free_space+md_2.in_free_space)/2.)
                 # matched_tracksの中に一つの値でしか紐付けられていない場合は、それを片足とみなし、もう一つはtracksを更新した予測値をもとに平均値を取る
                 elif propogated_track in matched_tracks:
+                    propogated_track.is_single_leg = True
                     md_1 = matched_tracks[propogated_track]
                     md_2 = duplicates[propogated_track]
                     matched_detection = DetectedCluster((md_1.pos_x+md_2.pos_x)/2., (md_1.pos_y+md_2.pos_y)/2., md_1.confidence, md_1.in_free_space)
                 # 同様にして、片足しか検出されない場合は、検出された片足と、予測値をもとに平均値を取る
                 elif duplicates[propogated_track] in matched_tracks:
+                    propogated_track.is_single_leg = True
                     md_1 = matched_tracks[duplicates[propogated_track]]
                     md_2 = propogated_track
                     matched_detection = DetectedCluster((md_1.pos_x+md_2.pos_x)/2., (md_1.pos_y+md_2.pos_y)/2., md_1.confidence, md_1.in_free_space)
@@ -352,10 +398,11 @@ class KalmanMultiTrackerNode(Node):
             # 追跡対象の信頼度が低ければtrackから削除する、信頼度は対象が自由空間にあれば高くなり、また検出結果とマッチしていたかによって左右される
             if  track.is_person and track.confidence < self.confidence_threshold_to_maintain_track:
                 tracks_to_delete.add(track)
-                # rospy.loginfo("deleting due to low confidence")
+                self.logger.debug("deleting due to low confidence")
             else:
-                # 共分散行列が大きくなりすぎていれば削除する
+                # 共分散行列が大きくなりすぎていれば削除
                 cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
+                # if cov > self.max_cov or track.avg_speed < 0.002:
                 if cov > self.max_cov:
                     tracks_to_delete.add(track)
                     # rospy.loginfo("deleting because unseen for %.2f", (now - track.last_seen).to_sec())
@@ -394,6 +441,7 @@ class KalmanMultiTrackerNode(Node):
                 or (track_1.is_person and track_2.is_person) 
                 or track_1.confidence < self.confidence_threshold_to_maintain_track 
                 or track_2.confidence < self.confidence_threshold_to_maintain_track
+                or (track_1.is_static and track_2.is_static)  # 静的障害物のチェックを追加
                 ):
                     leg_pairs_to_delete.add((track_1, track_2))
                     continue
@@ -450,12 +498,19 @@ class KalmanMultiTrackerNode(Node):
             transform_available = self.buffer.can_transform(self.publish_people_frame, self.fixed_frame, tf_time)
 
         marker_id = 0
+        markers = MarkerArray()
+        ns = "objects_tracked"
+        frame_id = self.publish_people_frame
+        
         if not transform_available:
-            self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
+            self.get_logger().debug("Person tracker: tf not avaiable. Not publishing people")
         else:
             for track in self.objects_tracked:
-                if track.is_person:
+                if track.is_static:
                     continue
+                # 人でない場合は、円柱マーカは表示しない
+                #if track.is_person:
+                #    continue
 
                 if self.publish_occluded or track.seen_in_current_scan:  
                     ps = PointStamped()
@@ -469,41 +524,19 @@ class KalmanMultiTrackerNode(Node):
                         continue
 
                     # Publish Rviz Marker
-                    marker = Marker()
-                    marker.header.frame_id =  self.publish_people_frame
-                    marker.header.stamp = now
-                    marker.ns = "objects_tracked"
+                    color = [0.0, 0.0, 0.0, 1.0]
                     if track.in_free_space < self.in_free_space_threshold:
-                        marker.color.r = track.colour[0]
-                        marker.color.g = track.colour[1]
-                        marker.color.b = track.colour[2]
-                    else:
-                        marker.color.r = 0.0
-                        marker.color.g = 0.0
-                        marker.color.b = 0.0
-                    marker.color.a = 1.0
-                    marker.pose.position.x = ps.point.x
-                    marker.pose.position.y = ps.point.y
-                    marker.id = marker_id
+                        color[0] = track.color[0]
+                        color[1] = track.color[1]
+                        color[2] = track.color[2]
+                    position = [track.pos_x, track.pos_y, 0.15]
+                    scale = [0.05, 0.05, 0.10]
+                    marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER, position, scale, color, now)
+                    markers.markers.append(marker)
                     marker_id += 1
-                    marker.type = marker.CYLINDER
-                    marker.scale.x = 0.05
-                    marker.scale.y = 0.05
-                    marker.scale.z = 0.20
-                    marker.pose.position.z = 0.15
 
-                    self.marker_pub.publish(marker)
-
-            # # Clear previously published track markers
-            for m_id in range(marker_id, self.prev_track_marker_id):
-                marker = Marker()
-                marker.header.stamp = now
-                marker.header.frame_id = self.publish_people_frame
-                marker.ns = "object_tracked"
-                marker.id = m_id
-                marker.action = marker.DELETE
-                self.marker_pub.publish(marker)
-            self.prev_track_marker_id = marker_id
+            self.marker_array_pub.publish(markers)
+                    
 
     """
     Publish markers of tracked people to Rviz and to <people_tracked> topic
@@ -513,6 +546,7 @@ class KalmanMultiTrackerNode(Node):
         people_tracked_msg.header.stamp = now
         people_tracked_msg.header.frame_id = self.publish_people_frame
         marker_id = 0
+        is_same_id_flag = False
 
         # Make sure we can get the required transform first:
         if self.use_scan_header_stamp_for_tfs:
@@ -527,13 +561,19 @@ class KalmanMultiTrackerNode(Node):
             transform_available = self.buffer.can_transform(self.fixed_frame, self.publish_people_frame, tf_time)
 
         marker_id = 0
+        highest_score = -float('inf')
+        best_person = None
+        highest_score = 0
+        is_person  = False
+
         if not transform_available:
-            self.get_logger().info("Person tracker: tf not avaiable. Not publishing people")
+            self.get_logger().debug("Person tracker: tf not avaiable. Not publishing people")
         else :
             for person in self.objects_tracked:
                 if person.is_person == True:
                     if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people
                         # Get position in the <self.publish_people_frame> frame 
+                        is_person = True
                         ps = PointStamped()
                         ps.header.frame_id = self.fixed_frame
                         ps.header.stamp = tf_time.to_msg()
@@ -556,112 +596,116 @@ class KalmanMultiTrackerNode(Node):
                         new_person.pose.orientation.z = quaternion.z
                         new_person.pose.orientation.w = quaternion.w
                         new_person.id = person.id_num
+                        new_person.covariance = person.filtered_state_covariances[0][0]
+                        new_person.var_obs = person.var_obs
                         people_tracked_msg.people.append(new_person)
+                        
+                        # 人らしさのスコアを計算
+                        speed = math.sqrt(person.vel_x ** 2 + person.vel_y ** 2)
 
-                        # publish rviz markers       
+                        # スコアの初期値は信頼度に基づく
+                        score = person.confidence
+                        self.logger.debug(f"first score: {score}")
+                        
+                        # 片足しか検出されない場合はべナルティ
+                        if person.is_single_leg:
+                            score += LegTrackerParam.single_leg_penalty
+                            self.logger.debug(f"single leg penalty applied: {score}")
+                        
+                        # 静的である場合はペナルティ
+                        if  person.is_static:
+                            score += LegTrackerParam.static_penalty 
+                            self.logger.debug(f"is static score  {score}")
+                        
+                        # 同じIDの場合、大きくスコアを加算する
+                        if self.prev_person_id == new_person.id:
+                            score += LegTrackerParam.id_weight
+                            self.logger.debug(f"same id score  {score}")
+                        else:
+                            self.logger.debug(f"change id")
+
+                        # 距離に基づくペナルティ
+                        distance = math.sqrt(math.pow(ps.point.x, 2) + math.pow(ps.point.y, 2))
+                        score -= distance * LegTrackerParam.distance_weight
+                        self.logger.debug(f"distance score: {score}")
+                        
+                        # 速度に基づくスコア加算
+                        score += speed * LegTrackerParam.speed_weight
+                        self.logger.debug(f"speed score: {score}")
+                        self.logger.debug(f"\033[91mfinally score: {score}\033[0m")
+
+                        # 最高スコアの人物を選択
+                        if score > highest_score:
+                            highest_score = score
+                            best_person = new_person
+            
+            if best_person:
+                        target_person = new_person
+                        self.logger.debug(f"\033[94mFollowing the best-scored person id: {target_person.id}, pos_x: {target_person.pose.position.x}, pos_y: {target_person.pose.position.y}, prev_person_id = {self.prev_person_id}, score: {highest_score}\033[0m")
+
+                        self.follow_target_person_pub.publish(target_person)
+                        self.prev_person_id = target_person.id
+
+                        # publish rviz markers
+                        ns = "follow_target_person_marker"
+                        frame_id = self.publish_people_frame
+                        markers = MarkerArray()
                         # Cylinder for body
-                        marker = Marker()
-                        marker.header.frame_id = self.publish_people_frame
-                        marker.header.stamp = now
-                        marker.ns = "People_tracked"
-                        marker.color.r = person.colour[0]
-                        marker.color.g = person.colour[1]
-                        marker.color.b = person.colour[2]
-                        # marker.color.a = (rclpy.time.Duration(3) - (self.get_clock().now().to_msg() - person.last_seen)).nanoseconds()/rclpy.time.Duration(3).nanoseconds() + 0.1
-                        marker.color.a = 1.0
-                        marker.pose.position.x = ps.point.x 
-                        marker.pose.position.y = ps.point.y
-                        marker.id = marker_id
+                        body_marker = self.create_marker(marker_id, frame_id, ns, Marker.CYLINDER,
+                                                        [target_person.pose.position.x, target_person.pose.position.y, 0.8],
+                                                        [0.2, 0.2, 1.2], [0.0, 0.39, 0.0, 1.0], now)
+                        markers.markers.append(body_marker)
                         marker_id += 1
-                        marker.type = Marker.CYLINDER
-                        marker.scale.x = 0.2
-                        marker.scale.y = 0.2
-                        marker.scale.z = 1.2
-                        marker.pose.position.z = 0.8
-                        self.marker_pub.publish(marker)
                         
                         # Sphere for head shape
-                        marker.type = Marker.SPHERE
-                        marker.scale.x = 0.2
-                        marker.scale.y = 0.2
-                        marker.scale.z = 0.2
-                        marker.pose.position.z = 1.5
-                        marker.id = marker_id
+                        head_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
+                                                        [target_person.pose.position.x, target_person.pose.position.y, 1.5],
+                                                        [0.2, 0.2, 0.2], [0.0, 0.39, 0.0, 1.0], now)
+                        markers.markers.append(head_marker)
                         marker_id += 1
-                        self.marker_pub.publish(marker)
                         
                         # Text showing person's ID number
-                        marker.color.r = 1.0
-                        marker.color.g = 1.0
-                        marker.color.b = 1.0
-                        marker.color.a = 1.0
-                        marker.id = marker_id
+                        text_marker = self.create_marker(marker_id, frame_id, ns, Marker.TEXT_VIEW_FACING,
+                                                        [target_person.pose.position.x, target_person.pose.position.y, 1.7],
+                                                        [0.0, 0.0, 0.2], [1.0, 1.0, 1.0, 1.0], now, text=str(target_person.id)) 
+                        markers.markers.append(text_marker)
                         marker_id += 1
-                        marker.type = Marker.TEXT_VIEW_FACING
-                        marker.text = str(person.id_num)
-                        marker.scale.z = 0.2
-                        marker.pose.position.z = 1.7
-                        self.marker_pub.publish(marker)
                         
-                        # Arrow pointing in direction they're facing with magnitude proportional to speed
-                        marker.color.r = person.colour[0]
-                        marker.color.g = person.colour[1]
-                        marker.color.b = person.colour[2]
-                        # marker.color.a = ((rclpy.time.Duration(3.0) - (self.get_clock().now() - person.last_seen))/rclpy.time.Duration(3)) + 0.1
-                        marker.color.a = 1.0
-                        start_point = Point()
-                        end_point = Point()
-                        start_point.x = marker.pose.position.x 
-                        start_point.y = marker.pose.position.y 
-                        end_point.x = start_point.x + 0.5*person.vel_x
-                        end_point.y = start_point.y + 0.5*person.vel_y
-                        marker.pose.position.x = 0.
-                        marker.pose.position.y = 0.
-                        marker.pose.position.z = 0.1
-                        marker.id = marker_id
-                        marker_id += 1
-                        marker.type = Marker.ARROW
-                        marker.points.append(start_point)
-                        marker.points.append(end_point)
-                        marker.scale.x = 0.05
-                        marker.scale.y = 0.1
-                        marker.scale.z = 0.2
-                        self.marker_pub.publish(marker)
-
                         # <self.confidence_percentile>% confidence bounds of person's position as an ellipse:
-                        cov = person.filtered_state_covariances[0][0] + person.var_obs # cov_xx == cov_yy == cov
+                        cov = target_person.covariance + target_person.var_obs # cov_xx == cov_yy == cov
                         std = cov**(1./2.)
                         gate_dist_euclid = scipy.stats.norm.ppf(1.0 - (1.0-self.confidence_percentile)/2., 0, std)
-                        marker.pose.position.x = ps.point.x
-                        marker.pose.position.y = ps.point.y
-                        marker.type = Marker.SPHERE
-                        marker.scale.x = 2*gate_dist_euclid
-                        marker.scale.y = 2*gate_dist_euclid
-                        marker.scale.z = 0.01
-                        marker.color.r = person.colour[0]
-                        marker.color.g = person.colour[1]
-                        marker.color.b = person.colour[2]
-                        marker.color.a = 0.1
-                        marker.pose.position.z = 0.0
-                        marker.id = marker_id
+                        confidence_marker = self.create_marker(marker_id, frame_id, ns, Marker.SPHERE,
+                                                        [target_person.pose.position.x, target_person.pose.position.y, 0.0],
+                                                        [2*gate_dist_euclid, 2*gate_dist_euclid, 0.01], [0.0, 0.39, 0.0, 0.2], now)
+                        markers.markers.append(confidence_marker)
                         marker_id += 1
-                        self.marker_pub.publish(marker)
+                        self.marker_array_pub.publish(markers)
+                
+                        # Publish people tracked message
+                        self.people_tracked_pub.publish(people_tracked_msg)                    
 
-        # Clear previously published people markers
-        for m_id in range(marker_id, self.prev_person_marker_id):
-            marker = Marker()
-            marker.header.stamp = now
-            marker.header.frame_id = self.publish_people_frame
-            marker.ns = "People_tracked"
-            marker.id = m_id
-            marker.action = marker.DELETE
-            self.marker_pub.publish(marker)
-        self.prev_person_marker_id = marker_id
+    def create_marker(self, marker_id, frame_id, ns, marker_type, position, scale, color, now, text=None):
+        marker = Marker()
+        marker.header.stamp = now
+        marker.header.frame_id = frame_id
+        marker.ns = ns
+        marker.id = marker_id
+        marker.type = marker_type
+        marker.pose.position.x = position[0]
+        marker.pose.position.y = position[1]
+        marker.pose.position.z = position[2]
+        marker.scale.x = scale[0]
+        marker.scale.y = scale[1]
+        marker.scale.z = scale[2]
+        marker.color.r = color[0]
+        marker.color.g = color[1]
+        marker.color.b = color[2]
+        marker.color.a = color[3]
+        if text:
+            marker.text = text
+        return marker
 
-        # Publish people tracked message
-        self.people_tracked_pub.publish(people_tracked_msg)                    
-
-                        
     def ToQuaternion (self, yaw, pitch, roll):
         cy = math.cos(yaw * 0.5)
         sy = math.sin(yaw * 0.5)

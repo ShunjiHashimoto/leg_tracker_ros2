@@ -104,7 +104,7 @@ public:
   * @brief Remove and delete all references to scan clusters less than a minimum size
   * @param num Minimum number of points in cluster
   */
-  void removeLessThan(uint32_t num);
+  void removeLessThan(uint32_t min_num, uint32_t max_num);
 
   /**
   * @brief Split scan into clusters

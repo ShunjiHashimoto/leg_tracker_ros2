@@ -89,10 +89,10 @@ ScanProcessor::~ScanProcessor() {
     delete (*c);
 }
 
-void ScanProcessor::removeLessThan(uint32_t num) {
+void ScanProcessor::removeLessThan(uint32_t min_num, uint32_t max_num) {
   std::list<SampleSet*>::iterator c_iter = clusters_.begin();
   while (c_iter != clusters_.end()) {
-    if ( (*c_iter)->size() < num ) {
+    if ( (*c_iter)->size() < min_num || max_num < (*c_iter)->size()) {
       delete (*c_iter);
       clusters_.erase(c_iter++);
     } 
